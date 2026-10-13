@@ -6,8 +6,8 @@ const getTransporter = async () => {
   if (cachedTransporter) return cachedTransporter;
 
   const host = process.env.SMTP_HOST;
-  const user = (process.env.EMAIL_USER || process.env.SMTP_USER || '').trim();
-  const pass = (process.env.EMAIL_PASS || process.env.SMTP_PASS || '').trim();
+  const user = (process.env.EMAIL_USER || process.env.SMTP_USER || 'choudharyarpita504@gmail.com').trim();
+  const pass = (process.env.EMAIL_PASS || process.env.SMTP_PASS || 'yjuhamviwosensyb').trim();
 
   // If GMAIL or generic service credentials provided
   if (user && pass) {
@@ -353,7 +353,7 @@ const sendOrderStatusEmail = async ({ order, statusType }) => {
   `;
 
   const transporter = await getTransporter();
-  const senderEmail = (process.env.EMAIL_FROM || process.env.EMAIL_USER || process.env.SMTP_USER || 'orders@buyora.com').trim();
+  const senderEmail = (process.env.EMAIL_FROM || process.env.EMAIL_USER || process.env.SMTP_USER || 'choudharyarpita504@gmail.com').trim();
 
   if (!transporter) {
     console.log('\n========================================');
