@@ -1,0 +1,12 @@
+{
+  "appId": "com.buyora.app",
+  "appName": "Buyora",
+  "webDir": "public",
+  "server": {
+    "url": "https://frontend-production-d1b2.up.railway.app",
+    "cleartext": true
+  },
+  "android": {
+    "allowMixedContent": true
+  }
+}

@@ -1,0 +1,45 @@
+{
+  "name": "Buyora - Customer Store",
+  "short_name": "Buyora Store",
+  "description": "Buyora Customer Shopping Panel - User Store Only (No Admin Access)",
+  "start_url": "/",
+  "display": "standalone",
+  "theme_color": "#1976d2",
+  "background_color": "#ffffff",
+  "orientation": "portrait-primary",
+  "icons": [
+    {
+      "src": "/icons/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icons/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icons/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ],
+  "screenshots": [
+    {
+      "src": "/screenshot-wide.jpg",
+      "sizes": "1366x768",
+      "type": "image/jpeg",
+      "form_factor": "wide",
+      "label": "Buyora - Browse products on desktop"
+    },
+    {
+      "src": "/screenshot-wide.jpg",
+      "sizes": "1366x768",
+      "type": "image/jpeg",
+      "label": "Buyora - Shop on mobile"
+    }
+  ]
+}

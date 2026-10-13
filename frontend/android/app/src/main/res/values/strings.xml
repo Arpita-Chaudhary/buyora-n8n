@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">Buyora</string>
+    <string name="title_activity_main">Buyora</string>
+    <string name="package_name">com.buyora.app</string>
+    <string name="custom_url_scheme">com.buyora.app</string>
+</resources>

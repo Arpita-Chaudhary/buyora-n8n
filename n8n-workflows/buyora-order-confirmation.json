@@ -1,0 +1,45 @@
+{
+  "name": "Buyora - Order Confirmation Email",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "buyora-order-created",
+        "authentication": "none",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [0, 0],
+      "id": "buyora-webhook-trigger",
+      "name": "Buyora Order Created Webhook"
+    },
+    {
+      "parameters": {
+        "fromEmail": "choudharyarpita504@gmail.com",
+        "toEmail": "={{ $json.body.data.customer.email || 'chaudharyarpita759@gmail.com' }}",
+        "subject": "=Order Confirmation #{{ $json.body.data.orderId }} - Buyora Store",
+        "html": "<div style=\"font-family: Arial, sans-serif; max-width: 600px; margin: auto; padding: 20px; border: 1px solid #e2e8f0; border-radius: 8px;\">\n  <h2 style=\"color: #4f46e5; margin-bottom: 4px;\">Buyora Store</h2>\n  <h3 style=\"color: #1e293b;\">Thank you for your order, {{ $json.body.data.customer.fullName || 'Valued Customer' }}!</h3>\n  <p style=\"color: #64748b;\">Your order has been placed successfully and is being prepared.</p>\n\n  <div style=\"background: #f8fafc; padding: 14px 16px; border-radius: 6px; margin: 16px 0;\">\n    <p style=\"margin: 4px 0;\"><strong>Order ID:</strong> #{{ $json.body.data.orderId }}</p>\n    <p style=\"margin: 4px 0;\"><strong>Status:</strong> {{ $json.body.data.orderStatus }}</p>\n    <p style=\"margin: 4px 0;\"><strong>Total Amount:</strong> ₹{{ $json.body.data.totalAmount }} {{ $json.body.data.currency }}</p>\n    <p style=\"margin: 4px 0;\"><strong>Delivery Zone:</strong> {{ $json.body.data.delivery.zoneName }} ({{ $json.body.data.delivery.estimatedDeliveryTime }})</p>\n  </div>\n\n  <p style=\"color: #94a3b8; font-size: 12px; margin-top: 24px;\">Thank you for shopping with Buyora Store!</p>\n</div>",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 2.1,
+      "position": [280, 0],
+      "id": "buyora-send-confirmation-email",
+      "name": "Send Confirmation Email"
+    }
+  ],
+  "connections": {
+    "Buyora Order Created Webhook": {
+      "main": [
+        [
+          {
+            "node": "Send Confirmation Email",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  }
+}

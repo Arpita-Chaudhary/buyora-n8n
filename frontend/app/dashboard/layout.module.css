@@ -1,0 +1,78 @@
+/* ==========================================================================
+   DASHBOARD LAYOUT WRAPPER STYLES
+   Attached Sidebar & Seamless Viewport Canvas
+   ========================================================================== */
+
+.dashboardShell {
+  display: flex;
+  min-height: 100vh;
+  background-color: #090d16;
+  position: relative;
+  width: 100%;
+}
+
+.mainViewport {
+  flex: 1;
+  min-width: 0;
+  margin-left: 270px;
+  width: calc(100% - 270px);
+  display: flex;
+  flex-direction: column;
+  background-color: #f8fafc;
+  min-height: 100vh;
+  position: relative;
+}
+
+/* Mobile Header Bar */
+.mobileTopBar {
+  display: none;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 20px;
+  background: #0b0f19;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  color: #ffffff;
+  position: sticky;
+  top: 0;
+  z-index: 60;
+}
+
+.mobileBrand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-weight: 700;
+  font-size: 15px;
+  color: #f8fafc;
+}
+
+.mobileMenuBtn {
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  color: #ffffff;
+  width: 38px;
+  height: 38px;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 18px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.mobileMenuBtn:active {
+  background: rgba(255, 255, 255, 0.18);
+  transform: scale(0.96);
+}
+
+@media (max-width: 900px) {
+  .mainViewport {
+    margin-left: 0;
+    width: 100%;
+  }
+
+  .mobileTopBar {
+    display: flex;
+  }
+}
