@@ -4,7 +4,7 @@ const mongoose = require('mongoose');
 mongoose.set('bufferCommands', false);
 
 const DEFAULT_ATLAS_URI =
-  'mongodb+srv://choudharyarpita504_db_userr:Buyora%2540123456@cluster0.pyaqdub.mongodb.net/admin_panel?retryWrites=true&w=majority&appName=Cluster0';
+  'mongodb+srv://Arpita:arpita%402004@cluster0.pyaqdub.mongodb.net/admin_panel?retryWrites=true&w=majority&appName=Cluster0';
 
 const connectDB = async () => {
   if (mongoose.connection.readyState === 1) {
@@ -13,17 +13,16 @@ const connectDB = async () => {
 
   let mongoUri = process.env.MONGO_URI || process.env.MONGO_URL || process.env.MONGODB_URL;
 
-  // Auto-sanitize: If missing, pointing to localhost, or has any Buyora variant, use the tested Atlas URI
+  // If missing or pointing to localhost or old user, use the verified Arpita Atlas URI
   if (
     !mongoUri ||
     mongoUri.includes('localhost') ||
     mongoUri.includes('127.0.0.1') ||
-    mongoUri.includes('Buyora%40') ||
-    mongoUri.includes('Buyora@') ||
-    mongoUri.includes('Buyora123456') ||
+    mongoUri.includes('choudharyarpita504') ||
+    mongoUri.includes('Buyora') ||
     !mongoUri.startsWith('mongodb')
   ) {
-    console.log('[DB] Using verified MongoDB Atlas production cluster connection...');
+    console.log('[DB] Using verified MongoDB Atlas production cluster connection (Arpita)...');
     mongoUri = DEFAULT_ATLAS_URI;
   }
 
