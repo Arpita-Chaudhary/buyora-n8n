@@ -48,6 +48,21 @@ app.get('/api/health', (req, res) => {
     databaseHost: mongoose.connection.host || null,
   });
 });
+// Database connection verification middleware for all API requests
+app.use(async (req, res, next) => {
+  if (req.path.startsWith('/api') && req.path !== '/api/health') {
+    const mongoose = require('mongoose');
+    if (mongoose.connection.readyState !== 1) {
+      try {
+        await connectDB();
+      } catch (err) {
+        console.error('[DB Middleware] Auto-reconnect failed:', err.message);
+      }
+    }
+  }
+  next();
+});
+
 // 6. Mount API Routes
 app.use('/api/auth', authRoutes);
 app.use('/api/users', userRoutes);

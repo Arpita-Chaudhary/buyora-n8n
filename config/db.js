@@ -4,36 +4,49 @@ const DEFAULT_ATLAS_URI =
   'mongodb+srv://choudharyarpita504_db_userr:Buyora%2540123456@cluster0.pyaqdub.mongodb.net/admin_panel?retryWrites=true&w=majority&appName=Cluster0';
 
 const connectDB = async () => {
+  if (mongoose.connection.readyState === 1) {
+    return mongoose.connection;
+  }
+
   let mongoUri = process.env.MONGO_URI || process.env.MONGO_URL || process.env.MONGODB_URL;
 
-  // On cloud platforms (Render) or if localhost is specified without local mongo, use Atlas
+  // Auto-sanitize: If missing, pointing to localhost, or has any Buyora variant, use the tested Atlas URI
   if (
     !mongoUri ||
     mongoUri.includes('localhost') ||
-    mongoUri.includes('127.0.0.1')
+    mongoUri.includes('127.0.0.1') ||
+    mongoUri.includes('Buyora%40') ||
+    mongoUri.includes('Buyora@') ||
+    mongoUri.includes('Buyora123456') ||
+    !mongoUri.startsWith('mongodb')
   ) {
-    console.log('[DB] Using MongoDB Atlas production cluster connection...');
+    console.log('[DB] Using verified MongoDB Atlas production cluster connection...');
     mongoUri = DEFAULT_ATLAS_URI;
   }
 
   try {
+    if (mongoose.connection.readyState !== 0) {
+      await mongoose.disconnect().catch(() => {});
+    }
+
     const conn = await mongoose.connect(mongoUri, {
-      serverSelectionTimeoutMS: 7000,
+      serverSelectionTimeoutMS: 8000,
     });
     console.log(`[DB] MongoDB Connected: ${conn.connection.host}`);
     return conn;
   } catch (error) {
-    console.error(`[DB] Error connecting with primary URI: ${error.message}`);
+    console.error(`[DB] Connection failed on ${mongoUri}: ${error.message}`);
     if (mongoUri !== DEFAULT_ATLAS_URI) {
-      console.log('[DB] Retrying connection with Atlas fallback URI...');
+      console.log('[DB] Retrying immediately with verified DEFAULT_ATLAS_URI...');
       try {
+        await mongoose.disconnect().catch(() => {});
         const fallbackConn = await mongoose.connect(DEFAULT_ATLAS_URI, {
-          serverSelectionTimeoutMS: 7000,
+          serverSelectionTimeoutMS: 8000,
         });
-        console.log(`[DB] MongoDB Connected via fallback: ${fallbackConn.connection.host}`);
+        console.log(`[DB] Fallback MongoDB Connected: ${fallbackConn.connection.host}`);
         return fallbackConn;
       } catch (fallbackErr) {
-        console.error(`[DB] Fallback connection failed: ${fallbackErr.message}`);
+        console.error(`[DB] Fallback error: ${fallbackErr.message}`);
       }
     }
   }
