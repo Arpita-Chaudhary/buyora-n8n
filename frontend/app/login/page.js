@@ -142,7 +142,15 @@ function LoginFormContent() {
         body: JSON.stringify({ email: cleanEmail, password: cleanPassword, role }),
       });
 
-      const data = await response.json();
+      const rawText = await response.text();
+      let data = {};
+      try {
+        data = JSON.parse(rawText);
+      } catch (e) {
+        if (!response.ok) {
+          throw new Error('Backend is starting up or deploying. Please wait 15-30 seconds and try again.');
+        }
+      }
 
       if (!response.ok) {
         throw new Error(data.message || 'Login failed. Please verify credentials and role.');
@@ -191,7 +199,15 @@ function LoginFormContent() {
         body: JSON.stringify({ name: cleanName, email: cleanEmail, password: cleanPassword }),
       });
 
-      const data = await response.json();
+      const rawText = await response.text();
+      let data = {};
+      try {
+        data = JSON.parse(rawText);
+      } catch (e) {
+        if (!response.ok) {
+          throw new Error('Backend is starting up or deploying. Please wait 15-30 seconds and try again.');
+        }
+      }
 
       if (!response.ok) {
         throw new Error(data.message || 'Registration failed.');
