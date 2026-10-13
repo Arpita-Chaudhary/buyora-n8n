@@ -96,11 +96,13 @@ export default function OrderTrackingMap({
   destinationAddress,
   orderStatus = 'OUT_FOR_DELIVERY',
   isLiveConnected = true,
+  onDelivered,
 }) {
   const [leafletComponents, setLeafletComponents] = useState(null);
   const [LInstance, setLInstance] = useState(null);
   const [transitProgress, setTransitProgress] = useState(0); // 0 (Store Hub) to 1.0 (Doorstep)
   const [liveSocketLatLng, setLiveSocketLatLng] = useState(null);
+  const hasTriggeredDeliveredRef = useRef(false);
 
   // Parse Destination Coordinates (Customer Doorstep)
   const destinationLatLng = useMemo(() => {
@@ -240,6 +242,46 @@ export default function OrderTrackingMap({
     const dLng = Math.abs(riderLatLng[1] - destinationLatLng[1]);
     return dLat < 0.0006 && dLng < 0.0006;
   }, [riderLatLng, destinationLatLng, isDelivered, transitProgress, liveSocketLatLng]);
+
+  // Automatic Delivery Trigger when rider arrives at customer destination
+  // No admin confirmation needed: automatically updates order status to DELIVERED in MongoDB!
+  useEffect(() => {
+    if (isDelivered) {
+      hasTriggeredDeliveredRef.current = true;
+      return;
+    }
+
+    if ((transitProgress >= 1 || isArrivedAtDestination) && !hasTriggeredDeliveredRef.current && orderId) {
+      hasTriggeredDeliveredRef.current = true;
+      console.log(`[OrderTrackingMap] Arrival detected! Auto-marking order ${orderId} as DELIVERED.`);
+
+      if (typeof onDelivered === 'function') {
+        onDelivered(orderId);
+      }
+
+      // Call backend API directly to guarantee database persistence and delivery confirmation email
+      const authToken =
+        typeof window !== 'undefined'
+          ? localStorage.getItem('token') || localStorage.getItem('admin_token')
+          : null;
+
+      fetch(`/api/payments/orders/${orderId}/status`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(authToken ? { Authorization: `Bearer ${authToken}` } : {}),
+        },
+        body: JSON.stringify({ status: 'DELIVERED' }),
+      })
+        .then((res) => res.json())
+        .then((data) => {
+          console.log('[OrderTrackingMap] Auto-delivered order in DB successfully:', data);
+        })
+        .catch((err) => {
+          console.error('[OrderTrackingMap] Auto-delivered API error:', err);
+        });
+    }
+  }, [transitProgress, isArrivedAtDestination, isDelivered, orderId, onDelivered]);
 
   // Create custom markers
   const riderIcon = useMemo(() => {

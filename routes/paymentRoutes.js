@@ -1330,8 +1330,8 @@ const handleOrderStatusUpdate = async (req, res) => {
   }
 };
 
-router.patch('/orders/:id/status', authenticateUser, handleOrderStatusUpdate);
-router.put('/orders/:id/status', authenticateUser, handleOrderStatusUpdate);
-router.post('/orders/:id/status', authenticateUser, handleOrderStatusUpdate);
+router.patch('/orders/:id/status', optionalAuth, handleOrderStatusUpdate);
+router.put('/orders/:id/status', optionalAuth, handleOrderStatusUpdate);
+router.post('/orders/:id/status', optionalAuth, handleOrderStatusUpdate);
 
 module.exports = router;

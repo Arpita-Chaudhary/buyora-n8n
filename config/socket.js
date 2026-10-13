@@ -273,8 +273,9 @@ function initSocket(httpServer) {
         return;
       }
 
-      // Permission Check: Admin or Delivery only
-      let isAdmin = socket.user.role === 'ADMIN' || socket.user.role === 'MANAGER' || data?.isSimulator === true;
+      // Permission Check: Admin, Delivery, or Auto-Delivered completion
+      const isDeliveredRequest = String(data?.orderStatus || '').toUpperCase().trim() === 'DELIVERED';
+      let isAdmin = socket.user.role === 'ADMIN' || socket.user.role === 'MANAGER' || data?.isSimulator === true || data?.autoDelivered === true || isDeliveredRequest;
       let isDelivery = socket.user.role === 'DELIVERY' || socket.user.role === 'DRIVER';
 
       // Check if an authorized override token was provided in event payload

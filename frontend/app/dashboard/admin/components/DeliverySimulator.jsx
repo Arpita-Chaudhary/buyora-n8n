@@ -404,8 +404,9 @@ export default function DeliverySimulator({ token, initialOrderId = '' }) {
         clearInterval(autoPlayTimerRef.current);
         autoPlayTimerRef.current = null;
         setIsAutoPlaying(false);
-        addLog('🎉 Route simulation complete! Rider reached Customer Location.', 'success');
-        setShowDeliveredPrompt(true);
+        addLog('🎉 Route simulation complete! Rider reached Customer Location. Automatically marking order as DELIVERED in MongoDB...', 'success');
+        setShowDeliveredPrompt(false);
+        handleMarkAsDelivered();
         return;
       }
 

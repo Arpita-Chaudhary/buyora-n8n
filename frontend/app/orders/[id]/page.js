@@ -220,6 +220,56 @@ export default function OrderDetailsPage() {
     handleRealtimeLocationUpdate
   );
 
+  // Automatic Order Delivered handler when tracking arrives at doorstep
+  // Automatically transitions status to DELIVERED without requiring admin confirmation!
+  const handleAutoDelivered = useCallback(
+    async (deliveringOrderId) => {
+      const targetId = deliveringOrderId || order?._id || orderId;
+      if (!targetId) return;
+
+      const currentStatus = String(order?.orderStatus || '').toUpperCase();
+      if (currentStatus === 'DELIVERED') return;
+
+      console.log(`[OrderDetailsPage] Auto-delivering order ${targetId}...`);
+
+      const nowIso = new Date().toISOString();
+
+      // 1. Immediately reflect DELIVERED in UI and trigger celebratory toaster
+      setDeliveryToaster({
+        show: true,
+        title: '🎉 Order Delivered Successfully!',
+        message: 'Your order has been safely delivered to your doorstep. Thank you for shopping with us!',
+        deliveredAt: nowIso,
+      });
+
+      setOrder((prev) => (prev ? { ...prev, orderStatus: 'DELIVERED', deliveredAt: nowIso } : prev));
+
+      // 2. Persist to MongoDB backend via API
+      try {
+        const auth = getStoredAuth();
+        const authToken = auth?.token || token;
+
+        const res = await fetch(`/api/payments/orders/${targetId}/status`, {
+          method: 'PATCH',
+          headers: {
+            'Content-Type': 'application/json',
+            ...(authToken ? { Authorization: `Bearer ${authToken}` } : {}),
+          },
+          body: JSON.stringify({ status: 'DELIVERED' }),
+        });
+
+        const data = await res.json();
+        if (data?.success && data?.data) {
+          setOrder(data.data);
+          console.log(`[OrderDetailsPage] Order ${targetId} successfully updated to DELIVERED in MongoDB!`);
+        }
+      } catch (err) {
+        console.error('[OrderDetailsPage] Error syncing auto-delivered status to database:', err);
+      }
+    },
+    [order?._id, order?.orderStatus, orderId, token]
+  );
+
   // Handler for customer raising a refund request
   const handleRefundSubmit = async (e) => {
     e.preventDefault();
@@ -664,6 +714,32 @@ export default function OrderDetailsPage() {
               </span>
 
               {renderSingleStatusBadge(order)}
+
+              {String(order?.orderStatus || '').toUpperCase() !== 'DELIVERED' &&
+                String(order?.orderStatus || '').toUpperCase() !== 'CANCELLED' && (
+                  <button
+                    type="button"
+                    onClick={() => handleAutoDelivered(order._id)}
+                    style={{
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '5px',
+                      fontSize: '12px',
+                      fontWeight: 700,
+                      padding: '5px 12px',
+                      borderRadius: '8px',
+                      background: '#059669',
+                      color: '#ffffff',
+                      border: 'none',
+                      cursor: 'pointer',
+                      boxShadow: '0 2px 6px rgba(5, 150, 105, 0.25)',
+                      transition: 'all 0.2s ease',
+                    }}
+                    title="Click if order is already received"
+                  >
+                    ✓ Mark as Delivered
+                  </button>
+                )}
             </div>
           </div>
         </div>
@@ -800,6 +876,7 @@ export default function OrderDetailsPage() {
             }
             orderStatus={order.orderStatus}
             isLiveConnected={isSocketConnected}
+            onDelivered={handleAutoDelivered}
           />
         )}
 
