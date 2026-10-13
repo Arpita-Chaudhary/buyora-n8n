@@ -1,5 +1,8 @@
 const mongoose = require('mongoose');
 
+// Never buffer queries when disconnected (fail fast with descriptive error)
+mongoose.set('bufferCommands', false);
+
 const DEFAULT_ATLAS_URI =
   'mongodb+srv://choudharyarpita504_db_userr:Buyora%2540123456@cluster0.pyaqdub.mongodb.net/admin_panel?retryWrites=true&w=majority&appName=Cluster0';
 

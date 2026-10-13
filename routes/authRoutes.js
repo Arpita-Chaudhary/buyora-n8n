@@ -83,8 +83,16 @@ router.post('/register', async (req, res, next) => {
 });
 router.post('/login', async (req, res, next) => {
   try {
+    const mongoose = require('mongoose');
     const connectDB = require('../config/db');
     await connectDB();
+
+    if (mongoose.connection.readyState !== 1) {
+      return res.status(503).json({
+        success: false,
+        message: 'Database is connecting or blocked by MongoDB Atlas. Please ensure IP 0.0.0.0/0 is added in MongoDB Atlas -> Network Access.',
+      });
+    }
 
     const { email, password, role } = req.body;
     // 1. Validate required fields
