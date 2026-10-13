@@ -9,6 +9,9 @@ const { authenticateUser } = require('../middleware/authMiddleware');
 const { encryptToken } = require('../utils/encryption');
 router.post('/register', async (req, res, next) => {
   try {
+    const connectDB = require('../config/db');
+    await connectDB();
+
     const { name, email, password, role } = req.body;
     // 1. Validate required fields
     if (!name || !email || !password) {
@@ -80,6 +83,9 @@ router.post('/register', async (req, res, next) => {
 });
 router.post('/login', async (req, res, next) => {
   try {
+    const connectDB = require('../config/db');
+    await connectDB();
+
     const { email, password, role } = req.body;
     // 1. Validate required fields
     if (!email || !password) {
