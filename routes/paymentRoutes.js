@@ -426,10 +426,30 @@ router.post('/create-payment-intent', optionalAuth, async (req, res) => {
       stockDeducted: false,
     });
 
-    // 9. Trigger n8n order.created workflow asynchronously (non-blocking, only after MongoDB save)
-    sendOrderCreatedToN8n(newOrder).catch((err) => {
-      console.warn(`[n8n Integration] Notice: Could not dispatch order.created for #${newOrder._id}:`, err.message);
-    });
+    // 9. Trigger n8n order.created workflow asynchronously with automatic email fallback
+    sendOrderCreatedToN8n(newOrder)
+      .then(async (n8nRes) => {
+        if (!n8nRes || !n8nRes.success) {
+          console.log(`[Email Service] n8n unavailable for order #${newOrder._id}. Activating automatic direct email delivery...`);
+          try {
+            await sendOrderStatusEmail({ order: newOrder, statusType: 'created' });
+            newOrder.confirmationEmailSent = true;
+            await newOrder.save();
+          } catch (mailErr) {
+            console.warn('[Email Service] Direct fallback email notice:', mailErr.message);
+          }
+        }
+      })
+      .catch(async (err) => {
+        console.warn(`[n8n Integration] Notice: Could not dispatch order.created for #${newOrder._id}:`, err.message);
+        try {
+          await sendOrderStatusEmail({ order: newOrder, statusType: 'created' });
+          newOrder.confirmationEmailSent = true;
+          await newOrder.save();
+        } catch (mailErr) {
+          console.warn('[Email Service] Direct fallback email notice:', mailErr.message);
+        }
+      });
 
     // 10. Return ONLY what is needed by the frontend
     return res.status(200).json({

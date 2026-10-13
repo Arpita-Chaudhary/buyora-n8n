@@ -123,16 +123,22 @@ const sendOrderStatusEmail = async ({ order, statusType }) => {
   if (!order) return null;
 
   const cleanStatusType = String(statusType || '').toLowerCase();
+  const isCreated = cleanStatusType === 'created' || cleanStatusType === 'placed' || cleanStatusType === 'order_created';
   const isPaid = cleanStatusType === 'paid' || cleanStatusType === 'payment_done';
   const isDelivered = cleanStatusType === 'delivered';
 
-  // Only send emails for payment done and product delivered (1 mail for payment, 1 mail for delivery)
-  if (!isPaid && !isDelivered) {
-    console.log(`[ORDER EMAIL]: Skipping status '${cleanStatusType}'. Only 'paid' and 'delivered' emails are sent.`);
+  // Only send emails for created, payment done and product delivered
+  if (!isCreated && !isPaid && !isDelivered) {
+    console.log(`[ORDER EMAIL]: Skipping status '${cleanStatusType}'. Only 'created', 'paid' and 'delivered' emails are sent.`);
     return null;
   }
 
   // Idempotency check: Do not send multiple emails for the same milestone
+  if (isCreated && order.confirmationEmailSent) {
+    console.log(`[ORDER EMAIL]: Order confirmation email already sent for Order ${order._id}. Skipping duplicate.`);
+    return null;
+  }
+
   if (isPaid && order.paymentEmailSent) {
     console.log(`[ORDER EMAIL]: Payment confirmation email already sent for Order ${order._id}. Skipping duplicate.`);
     return null;
@@ -190,6 +196,15 @@ const sendOrderStatusEmail = async ({ order, statusType }) => {
   let statusDescription = '';
 
   switch (statusType?.toLowerCase()) {
+    case 'created':
+    case 'placed':
+    case 'order_created':
+      subject = `Order Confirmed: #${orderShortId} - Buyora Store`;
+      statusBannerColor = '#2563eb';
+      statusTitle = 'Order Placed Successfully!';
+      statusDescription = `Thank you for your order, ${customerName}! Your order #${orderShortId} for <strong>$${totalAmount} ${currency}</strong> has been placed and is currently being processed.`;
+      break;
+
     case 'paid':
     case 'payment_done':
       subject = `Payment Confirmed: Order #${orderShortId} - Buyora Store`;
