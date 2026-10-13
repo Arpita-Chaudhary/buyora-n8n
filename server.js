@@ -32,11 +32,20 @@ app.use(
   })
 );
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
-// 5. Base Route
+// 5. Base Route & Health Route
 app.get('/', (req, res) => {
   res.status(200).json({
     success: true,
     message: 'Welcome to the Backend REST API Server with Socket.IO Real-Time Tracking',
+  });
+});
+app.get('/api/health', (req, res) => {
+  const mongoose = require('mongoose');
+  res.status(200).json({
+    success: true,
+    status: 'ok',
+    database: mongoose.connection.readyState === 1 ? 'connected' : 'disconnected',
+    databaseHost: mongoose.connection.host || null,
   });
 });
 // 6. Mount API Routes
