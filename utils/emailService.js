@@ -398,7 +398,10 @@ const sendOrderStatusEmail = async ({ order, statusType }) => {
   const Order = require('../models/Order');
   if (results.some((r) => r.success)) {
     try {
-      if (isPaid) {
+      if (isCreated) {
+        await Order.findByIdAndUpdate(order._id, { confirmationEmailSent: true });
+        order.confirmationEmailSent = true;
+      } else if (isPaid) {
         await Order.findByIdAndUpdate(order._id, { paymentEmailSent: true });
         order.paymentEmailSent = true;
       } else if (isDelivered) {

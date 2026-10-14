@@ -426,30 +426,19 @@ router.post('/create-payment-intent', optionalAuth, async (req, res) => {
       stockDeducted: false,
     });
 
-    // 9. Trigger n8n order.created workflow asynchronously with automatic email fallback
-    sendOrderCreatedToN8n(newOrder)
-      .then(async (n8nRes) => {
-        if (!n8nRes || !n8nRes.success) {
-          console.log(`[Email Service] n8n unavailable for order #${newOrder._id}. Activating automatic direct email delivery...`);
-          try {
-            await sendOrderStatusEmail({ order: newOrder, statusType: 'created' });
-            newOrder.confirmationEmailSent = true;
-            await newOrder.save();
-          } catch (mailErr) {
-            console.warn('[Email Service] Direct fallback email notice:', mailErr.message);
-          }
-        }
+    // 9. Send order confirmation email immediately to customer
+    sendOrderStatusEmail({ order: newOrder, statusType: 'created' })
+      .then(async () => {
+        newOrder.confirmationEmailSent = true;
+        await newOrder.save();
+        console.log(`[Email Service] Confirmation email dispatched immediately for Order #${newOrder._id}`);
       })
-      .catch(async (err) => {
-        console.warn(`[n8n Integration] Notice: Could not dispatch order.created for #${newOrder._id}:`, err.message);
-        try {
-          await sendOrderStatusEmail({ order: newOrder, statusType: 'created' });
-          newOrder.confirmationEmailSent = true;
-          await newOrder.save();
-        } catch (mailErr) {
-          console.warn('[Email Service] Direct fallback email notice:', mailErr.message);
-        }
-      });
+      .catch((err) => console.warn('[Email Service] Direct email notice:', err.message));
+
+    // Also trigger n8n order.created workflow asynchronously in background
+    sendOrderCreatedToN8n(newOrder).catch((err) => {
+      console.warn(`[n8n Integration] Background dispatch:`, err.message);
+    });
 
     // 10. Return ONLY what is needed by the frontend
     return res.status(200).json({
