@@ -372,7 +372,7 @@ export default function CheckoutPage() {
     // 1. Record completed transaction reference
     // Build a customer object with nested shippingAddress to match the shape
     // expected by the success screen and StripePaymentForm
-    const effectiveOrderId = confirmedOrder?.id || serverOrderSummary?.orderId || paymentIntent.id;
+    const effectiveOrderId = confirmedOrder?._id || confirmedOrder?.id || serverOrderSummary?.orderId || paymentIntent.id;
     setCompletedPayment({
       id: paymentIntent.id,
       orderId: effectiveOrderId,

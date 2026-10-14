@@ -79,6 +79,7 @@ function InnerStripeCheckoutForm({
 
       if (paymentIntent) {
         if (paymentIntent.status === 'succeeded' || paymentIntent.status === 'processing') {
+          let confirmedOrder = null;
           // Server-side confirmation: verify with Stripe API, update order & deduct stock
           try {
             const token = typeof window !== 'undefined' ? getStoredAuth().token : null;
@@ -87,7 +88,6 @@ function InnerStripeCheckoutForm({
               headers['Authorization'] = `Bearer ${token}`;
             }
 
-            let confirmedOrder = null;
             const confirmRes = await fetch('/api/payments/confirm-payment', {
               method: 'POST',
               headers,
