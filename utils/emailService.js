@@ -5,27 +5,42 @@ let cachedTransporter = null;
 const getTransporter = async () => {
   if (cachedTransporter) return cachedTransporter;
 
-  const host = process.env.SMTP_HOST;
+  const host = (process.env.SMTP_HOST || 'smtp.gmail.com').trim();
   const user = (process.env.EMAIL_USER || process.env.SMTP_USER || 'choudharyarpita504@gmail.com').trim();
-  const pass = (process.env.EMAIL_PASS || process.env.SMTP_PASS || 'yjuhamviwosensyb').trim();
+  
+  // Clean and sanitize App Password: strip whitespace; fallback to verified 16-char app pass if invalid
+  let rawPass = (process.env.EMAIL_PASS || process.env.SMTP_PASS || '').trim().replace(/\s+/g, '');
+  const pass = rawPass.length === 16 ? rawPass : 'yjuhamviwosensyb';
 
-  // If GMAIL or generic service credentials provided
   if (user && pass) {
-    if (host) {
+    try {
+      const port = Number(process.env.SMTP_PORT) || 465;
+      const isSecure = port === 465 || !process.env.SMTP_PORT;
+
       cachedTransporter = nodemailer.createTransport({
         host,
-        port: Number(process.env.SMTP_PORT) || 587,
-        secure: Number(process.env.SMTP_PORT) === 465,
+        port,
+        secure: isSecure,
         auth: { user, pass },
+        pool: true,
+        maxConnections: 3,
+        connectionTimeout: 10000,
+        greetingTimeout: 10000,
+        socketTimeout: 15000,
+        tls: {
+          rejectUnauthorized: false,
+        },
       });
-    } else {
-      // Default to Gmail service
+
+      return cachedTransporter;
+    } catch (err) {
+      console.warn(`[EMAIL SERVICE] Direct SSL setup notice: ${err.message}. Using Gmail service fallback.`);
       cachedTransporter = nodemailer.createTransport({
         service: 'gmail',
         auth: { user, pass },
       });
+      return cachedTransporter;
     }
-    return cachedTransporter;
   }
   // Fallback: Simulation / Dev Mode
   return null;
@@ -214,10 +229,10 @@ const sendOrderStatusEmail = async ({ order, statusType }) => {
 
     case 'paid':
     case 'payment_done':
-      subject = `Payment Confirmed: Order #${orderShortId} - Buyora Store`;
+      subject = `Order Confirmed: #${orderShortId} - Buyora Store`;
       statusBannerColor = '#16a34a';
-      statusTitle = 'Payment Done & Order Confirmed!';
-      statusDescription = `Thank you for your purchase, ${customerName}! Your payment of <strong>$${totalAmount} ${currency}</strong> has been successfully processed. Your order is confirmed and is now being prepared for shipment.`;
+      statusTitle = 'Order Confirmed & Payment Received!';
+      statusDescription = `Thank you for your purchase, ${customerName}! Your order #${orderShortId} has been confirmed and payment of <strong>$${totalAmount} ${currency}</strong> was successfully received. Your order is now being prepared for shipment.`;
       break;
 
     case 'refund_requested':
@@ -406,21 +421,31 @@ const sendOrderStatusEmail = async ({ order, statusType }) => {
   // Send separate, direct emails to each recipient individually (NO CC, NO BCC)
   const results = [];
   for (const targetEmail of recipients) {
+    const mailOptions = {
+      from: `"Buyora Store" <${senderEmail}>`,
+      to: targetEmail,
+      replyTo: senderEmail,
+      subject,
+      text: plainText,
+      html: htmlContent,
+    };
+
     try {
-      const mailOptions = {
-        from: `"Buyora Store" <${senderEmail}>`,
-        to: targetEmail,
-        replyTo: senderEmail,
-        subject,
-        text: plainText,
-        html: htmlContent,
-      };
       const info = await transporter.sendMail(mailOptions);
       console.log(`[ORDER EMAIL SENT]: Delivered ${statusType} individually to ${targetEmail} (MsgID: ${info.messageId})`);
       results.push({ email: targetEmail, success: true, messageId: info.messageId });
     } catch (err) {
-      console.error(`[ORDER EMAIL ERROR]: Failed sending ${statusType} to ${targetEmail}:`, err.message);
-      results.push({ email: targetEmail, success: false, error: err.message });
+      console.error(`[ORDER EMAIL ERROR]: Failed primary dispatch of ${statusType} to ${targetEmail}: ${err.message}. Retrying with fresh connection...`);
+      try {
+        cachedTransporter = null;
+        const fallbackTransporter = await getTransporter();
+        const retryInfo = await fallbackTransporter.sendMail(mailOptions);
+        console.log(`[ORDER EMAIL RETRY SUCCESS]: Delivered ${statusType} to ${targetEmail} on retry (MsgID: ${retryInfo.messageId})`);
+        results.push({ email: targetEmail, success: true, messageId: retryInfo.messageId });
+      } catch (retryErr) {
+        console.error(`[ORDER EMAIL RETRY FAILED]: Could not deliver to ${targetEmail}: ${retryErr.message}`);
+        results.push({ email: targetEmail, success: false, error: retryErr.message });
+      }
     }
   }
 
@@ -431,8 +456,12 @@ const sendOrderStatusEmail = async ({ order, statusType }) => {
         await Order.findByIdAndUpdate(order._id, { confirmationEmailSent: true });
         order.confirmationEmailSent = true;
       } else if (isPaid) {
-        await Order.findByIdAndUpdate(order._id, { paymentEmailSent: true });
+        await Order.findByIdAndUpdate(order._id, {
+          paymentEmailSent: true,
+          confirmationEmailSent: true,
+        });
         order.paymentEmailSent = true;
+        order.confirmationEmailSent = true;
       } else if (isDelivered) {
         await Order.findByIdAndUpdate(order._id, { deliveryEmailSent: true });
         order.deliveryEmailSent = true;

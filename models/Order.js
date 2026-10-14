@@ -239,6 +239,10 @@ const orderSchema = new mongoose.Schema(
     },
 
     // Email Dispatch Idempotency Flags (Guarantees exactly ONE mail per milestone)
+    confirmationEmailSent: {
+      type: Boolean,
+      default: false,
+    },
     paymentEmailSent: {
       type: Boolean,
       default: false,

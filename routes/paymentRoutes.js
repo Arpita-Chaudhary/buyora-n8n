@@ -494,8 +494,16 @@ router.post('/create-payment-intent', optionalAuth, async (req, res) => {
 async function fulfillOrderPayment(order, paymentIntent) {
   if (!order) return null;
 
-  // 1. If already marked paid and stock already deducted, return directly
+  // 1. If already marked paid and stock already deducted, check email and return
   if (order.paymentStatus === 'paid' && order.stockDeducted === true) {
+    if (!order.paymentEmailSent || !order.confirmationEmailSent) {
+      console.log(`[ORDER FULFILLED]: Order #${order._id} was marked paid but confirmation email not yet sent. Dispatching now...`);
+      try {
+        await sendOrderStatusEmail({ order, statusType: 'paid' });
+      } catch (err) {
+        console.error('[EMAIL NOTIFICATION FAILED]:', err.message);
+      }
+    }
     return order;
   }
 
@@ -542,10 +550,13 @@ async function fulfillOrderPayment(order, paymentIntent) {
   // 4. Emit real-time tracking event via Socket.IO
   emitOrderUpdate(order._id.toString(), order);
 
-  // 5. Send order paid email notification asynchronously
-  sendOrderStatusEmail({ order, statusType: 'paid' }).catch((err) => {
+  // 5. Send order confirmation & payment email notification (awaited to guarantee delivery before response returns)
+  try {
+    console.log(`[ORDER FULFILLED]: Sending order confirmation & payment email for Order #${order._id}...`);
+    await sendOrderStatusEmail({ order, statusType: 'paid' });
+  } catch (err) {
     console.error('[EMAIL NOTIFICATION FAILED]:', err.message);
-  });
+  }
 
   // 6. Trigger n8n order.paid workflow asynchronously (non-blocking)
   sendOrderPaidToN8n(order).catch((err) => {
