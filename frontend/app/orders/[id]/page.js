@@ -35,6 +35,13 @@ export default function OrderDetailsPage() {
   // Real-time Delivery Completion Toaster State
   const [deliveryToaster, setDeliveryToaster] = useState(null);
 
+  // Email Notifications (n8n Workflow Integration) State
+  const [emailLifecycle, setEmailLifecycle] = useState([]);
+  const [loadingEmails, setLoadingEmails] = useState(false);
+  const [previewingEmail, setPreviewingEmail] = useState(null);
+  const [triggeringEvent, setTriggeringEvent] = useState(null);
+  const [emailActionFeedback, setEmailActionFeedback] = useState(null);
+
   // Auto-dismiss delivery toaster after 12 seconds
   useEffect(() => {
     if (deliveryToaster?.show) {
@@ -44,6 +51,64 @@ export default function OrderDetailsPage() {
       return () => clearTimeout(timer);
     }
   }, [deliveryToaster]);
+
+  // Fetch email lifecycle records and HTML previews for the order
+  const fetchOrderEmails = useCallback(async (authToken, id) => {
+    if (!id || !authToken) return;
+    setLoadingEmails(true);
+    try {
+      const res = await fetch(`/api/payments/orders/${id}/emails`, {
+        headers: {
+          Authorization: `Bearer ${authToken}`,
+        },
+      });
+      const data = await res.json();
+      if (res.ok && data.success && Array.isArray(data.data)) {
+        setEmailLifecycle(data.data);
+      }
+    } catch (err) {
+      console.warn('[fetchOrderEmails] Failed to fetch email records:', err);
+    } finally {
+      setLoadingEmails(false);
+    }
+  }, []);
+
+  // Trigger test n8n email webhook directly from UI
+  const handleTestTriggerEmail = async (eventType) => {
+    if (!token || !orderId) return;
+    setTriggeringEvent(eventType);
+    setEmailActionFeedback(null);
+    try {
+      const res = await fetch(`/api/payments/orders/${orderId}/trigger-email`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ eventType }),
+      });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        setEmailActionFeedback({
+          type: 'success',
+          message: `Webhook for '${eventType}' triggered successfully! Dispatched to n8n.`,
+        });
+        fetchOrderEmails(token, orderId);
+      } else {
+        setEmailActionFeedback({
+          type: 'error',
+          message: data.message || `Failed to trigger webhook for '${eventType}'.`,
+        });
+      }
+    } catch (err) {
+      setEmailActionFeedback({
+        type: 'error',
+        message: 'Network error triggering email webhook.',
+      });
+    } finally {
+      setTriggeringEvent(null);
+    }
+  };
 
   // 1. Fetch order details from backend (declared first to avoid TDZ ReferenceError)
   const fetchOrderDetails = useCallback(async (authToken, id) => {
@@ -100,6 +165,7 @@ export default function OrderDetailsPage() {
         }
         if (orderId) {
           fetchOrderDetails(storedToken, orderId);
+          fetchOrderEmails(storedToken, orderId);
         }
       } else {
         // Customer is not logged in
@@ -112,7 +178,7 @@ export default function OrderDetailsPage() {
       setErrorStatus(500);
       setErrorMessage('Failed to verify session credentials.');
     }
-  }, [orderId, fetchOrderDetails]);
+  }, [orderId, fetchOrderDetails, fetchOrderEmails]);
 
   // Real-Time Tracking Timeline Configuration:
   // Order Placed ↓ Confirmed ↓ Preparing ↓ Out for Delivery ↓ Delivered
@@ -178,6 +244,10 @@ export default function OrderDetailsPage() {
         orderItems: orderObj?.orderItems || prev.orderItems,
       };
     });
+
+    if (token && orderId) {
+      fetchOrderEmails(token, orderId);
+    }
   }, []);
 
   // Real-time Delivery Partner Location via Socket.IO: deliveryLocationUpdated
@@ -1084,6 +1154,241 @@ export default function OrderDetailsPage() {
                   </div>
                 </div>
               )}
+
+            {/* Automated Email Notifications (n8n Workflow Integration) */}
+            <div
+              style={{
+                marginTop: '24px',
+                background: '#ffffff',
+                border: '1px solid #e2e8f0',
+                borderRadius: '16px',
+                padding: '24px',
+                boxShadow: '0 4px 12px -2px rgba(15, 23, 42, 0.05)',
+              }}
+            >
+              <div
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  flexWrap: 'wrap',
+                  gap: '12px',
+                  marginBottom: '16px',
+                  paddingBottom: '14px',
+                  borderBottom: '1px solid #f1f5f9',
+                }}
+              >
+                <div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <span style={{ fontSize: '20px' }}>✉️</span>
+                    <h2 style={{ margin: 0, fontSize: '18px', fontWeight: 800, color: '#0f172a' }}>
+                      Automated Email Notifications
+                    </h2>
+                    <span
+                      style={{
+                        background: '#eff6ff',
+                        color: '#2563eb',
+                        border: '1px solid #bfdbfe',
+                        fontSize: '11px',
+                        fontWeight: 700,
+                        padding: '2px 8px',
+                        borderRadius: '20px',
+                        letterSpacing: '0.04em',
+                        textTransform: 'uppercase',
+                      }}
+                    >
+                      n8n Workflows
+                    </span>
+                  </div>
+                  <p style={{ margin: '4px 0 0 0', fontSize: '13px', color: '#64748b' }}>
+                    Automated email lifecycle dispatched via n8n webhook pipelines without SMTP port blocks.
+                  </p>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => fetchOrderEmails(token, orderId)}
+                  disabled={loadingEmails}
+                  style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '6px',
+                    fontSize: '12px',
+                    fontWeight: 600,
+                    padding: '6px 12px',
+                    borderRadius: '8px',
+                    background: '#f8fafc',
+                    color: '#475569',
+                    border: '1px solid #cbd5e1',
+                    cursor: loadingEmails ? 'not-allowed' : 'pointer',
+                  }}
+                  title="Refresh Email Status"
+                >
+                  <span style={{ display: 'inline-block' }}>
+                    🔄
+                  </span>
+                  <span>{loadingEmails ? 'Checking...' : 'Refresh Status'}</span>
+                </button>
+              </div>
+
+              {/* Action Feedback Banner */}
+              {emailActionFeedback && (
+                <div
+                  style={{
+                    padding: '10px 14px',
+                    borderRadius: '8px',
+                    fontSize: '13px',
+                    fontWeight: 600,
+                    marginBottom: '16px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    background: emailActionFeedback.type === 'success' ? '#ecfdf5' : '#fef2f2',
+                    color: emailActionFeedback.type === 'success' ? '#065f46' : '#991b1b',
+                    border: emailActionFeedback.type === 'success' ? '1px solid #a7f3d0' : '1px solid #fecaca',
+                  }}
+                >
+                  <span>{emailActionFeedback.type === 'success' ? '✅' : '⚠️'} {emailActionFeedback.message}</span>
+                  <button
+                    type="button"
+                    onClick={() => setEmailActionFeedback(null)}
+                    style={{ background: 'transparent', border: 'none', cursor: 'pointer', fontSize: '14px', color: 'inherit' }}
+                  >
+                    ✕
+                  </button>
+                </div>
+              )}
+
+              {/* Email Stages Grid */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+                {emailLifecycle.length === 0 ? (
+                  <div style={{ textAlign: 'center', padding: '24px', color: '#64748b', fontSize: '13.5px' }}>
+                    {loadingEmails ? 'Loading email records...' : 'Generating email lifecycle records...'}
+                  </div>
+                ) : (
+                  emailLifecycle.map((item) => {
+                    const isSent = item.status === 'sent';
+                    const isScheduled = item.status === 'scheduled';
+                    const isTriggering = triggeringEvent === item.eventType;
+
+                    return (
+                      <div
+                        key={item.id}
+                        style={{
+                          background: '#f8fafc',
+                          border: isSent ? '1px solid #bbf7d0' : isScheduled ? '1px solid #fde68a' : '1px solid #e2e8f0',
+                          borderRadius: '12px',
+                          padding: '16px 18px',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'space-between',
+                          flexWrap: 'wrap',
+                          gap: '12px',
+                          transition: 'all 0.2s ease',
+                        }}
+                      >
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '14px', flex: '1 1 320px' }}>
+                          <div
+                            style={{
+                              width: '42px',
+                              height: '42px',
+                              borderRadius: '10px',
+                              background: isSent ? '#dcfce7' : isScheduled ? '#fef3c7' : '#e2e8f0',
+                              color: isSent ? '#166534' : isScheduled ? '#92400e' : '#475569',
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              fontSize: '20px',
+                              flexShrink: 0,
+                            }}
+                          >
+                            {item.icon}
+                          </div>
+                          <div>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                              <span style={{ fontWeight: 700, fontSize: '14.5px', color: '#0f172a' }}>
+                                {item.name}
+                              </span>
+                              <span
+                                style={{
+                                  fontSize: '11px',
+                                  fontWeight: 700,
+                                  padding: '2px 8px',
+                                  borderRadius: '12px',
+                                  background: isSent ? '#dcfce7' : isScheduled ? '#fef3c7' : '#f1f5f9',
+                                  color: isSent ? '#15803d' : isScheduled ? '#b45309' : '#64748b',
+                                  border: isSent ? '1px solid #86efac' : isScheduled ? '1px solid #fcd34d' : '1px solid #cbd5e1',
+                                }}
+                              >
+                                {isSent ? '✓ Sent (n8n)' : isScheduled ? '⏳ Scheduled (2m)' : '⚪ Pending'}
+                              </span>
+                            </div>
+                            <p style={{ margin: '3px 0 0', fontSize: '12.5px', color: '#64748b', lineHeight: 1.4 }}>
+                              {item.summary}
+                            </p>
+                            {item.recipient && (
+                              <div style={{ fontSize: '11.5px', color: '#94a3b8', marginTop: '2px' }}>
+                                To: <strong style={{ color: '#475569' }}>{item.recipient}</strong>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                          <button
+                            type="button"
+                            onClick={() => setPreviewingEmail(item)}
+                            style={{
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: '5px',
+                              fontSize: '12px',
+                              fontWeight: 700,
+                              padding: '7px 12px',
+                              borderRadius: '8px',
+                              background: '#ffffff',
+                              color: '#2563eb',
+                              border: '1px solid #bfdbfe',
+                              cursor: 'pointer',
+                              boxShadow: '0 1px 3px rgba(37, 99, 235, 0.1)',
+                              transition: 'all 0.15s ease',
+                            }}
+                          >
+                            <span>👁️</span>
+                            <span>Preview HTML</span>
+                          </button>
+
+                          <button
+                            type="button"
+                            onClick={() => handleTestTriggerEmail(item.eventType)}
+                            disabled={isTriggering}
+                            style={{
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: '5px',
+                              fontSize: '12px',
+                              fontWeight: 700,
+                              padding: '7px 12px',
+                              borderRadius: '8px',
+                              background: '#2563eb',
+                              color: '#ffffff',
+                              border: 'none',
+                              cursor: isTriggering ? 'not-allowed' : 'pointer',
+                              boxShadow: '0 2px 6px rgba(37, 99, 235, 0.25)',
+                              opacity: isTriggering ? 0.7 : 1,
+                            }}
+                            title="Send this event payload directly to the n8n webhook"
+                          >
+                            <span>⚡</span>
+                            <span>{isTriggering ? 'Triggering...' : 'Test Webhook'}</span>
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  })
+                )}
+              </div>
+            </div>
           </div>
 
           {/* Right Column: Order Summary & Shipping Info */}
@@ -1356,6 +1661,79 @@ export default function OrderDetailsPage() {
                   </button>
                 </div>
               </form>
+            </div>
+          </div>
+        )}
+        {/* Interactive Email HTML Preview Modal */}
+        {previewingEmail && (
+          <div
+            className={styles.modalOverlay}
+            onClick={() => setPreviewingEmail(null)}
+            style={{ zIndex: 1000001 }}
+          >
+            <div
+              className={styles.modalContent}
+              onClick={(e) => e.stopPropagation()}
+              style={{ maxWidth: '640px', width: '92%', maxHeight: '90vh', display: 'flex', flexDirection: 'column' }}
+            >
+              <div className={styles.modalHeader}>
+                <div className={styles.modalTitle}>
+                  <span>{previewingEmail.icon}</span>
+                  <span>Email Preview: {previewingEmail.name}</span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setPreviewingEmail(null)}
+                  className={styles.modalCloseBtn}
+                >
+                  ✕
+                </button>
+              </div>
+
+              <div style={{ padding: '12px 20px', background: '#f8fafc', borderBottom: '1px solid #e2e8f0', fontSize: '13px', color: '#475569' }}>
+                <div><strong>Subject:</strong> {previewingEmail.subject}</div>
+                <div style={{ marginTop: '4px' }}>
+                  <strong>To:</strong> {previewingEmail.recipient} | <strong>Event:</strong> <code style={{ color: '#2563eb' }}>{previewingEmail.eventType}</code>
+                </div>
+              </div>
+
+              <div
+                style={{
+                  padding: '20px',
+                  overflowY: 'auto',
+                  flex: 1,
+                  background: '#f1f5f9',
+                }}
+              >
+                <div
+                  dangerouslySetInnerHTML={{ __html: previewingEmail.previewHtml }}
+                  style={{
+                    background: '#ffffff',
+                    borderRadius: '8px',
+                    boxShadow: '0 4px 12px rgba(0,0,0,0.06)',
+                  }}
+                />
+              </div>
+
+              <div className={styles.modalFooter}>
+                <button
+                  type="button"
+                  onClick={() => setPreviewingEmail(null)}
+                  className={styles.modalCancelBtn}
+                >
+                  Close Preview
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    handleTestTriggerEmail(previewingEmail.eventType);
+                  }}
+                  className={styles.modalSubmitBtn}
+                  disabled={triggeringEvent === previewingEmail.eventType}
+                >
+                  ⚡ Trigger Webhook to n8n
+                </button>
+              </div>
             </div>
           </div>
         )}

@@ -931,6 +931,71 @@ router.get('/orders/:id', authenticateUser, async (req, res) => {
 });
 
 /**
+ * GET /api/payments/orders/:id/emails
+ * Returns the lifecycle email records and live HTML previews for an order.
+ * Enables viewing email functionality directly inside the deployed project.
+ */
+router.get('/orders/:id/emails', authenticateUser, async (req, res) => {
+  try {
+    const { id } = req.params;
+    let order = null;
+    if (isValidObjectId(id)) {
+      order = await Order.findById(id);
+    }
+    if (!order) {
+      order = await Order.findOne({ stripePaymentIntentId: id });
+    }
+    if (!order) {
+      return res.status(404).json({ success: false, message: 'Order not found.' });
+    }
+
+    const { generateEmailLifecyclePreviews } = require('../utils/emailService');
+    const emails = generateEmailLifecyclePreviews(order);
+
+    return res.status(200).json({
+      success: true,
+      data: emails,
+    });
+  } catch (err) {
+    return res.status(500).json({ success: false, message: err.message });
+  }
+});
+
+/**
+ * POST /api/payments/orders/:id/trigger-email
+ * Manually test-triggers an n8n lifecycle webhook from the frontend UI.
+ */
+router.post('/orders/:id/trigger-email', authenticateUser, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { eventType } = req.body;
+    let order = null;
+    if (isValidObjectId(id)) {
+      order = await Order.findById(id);
+    }
+    if (!order) {
+      order = await Order.findOne({ stripePaymentIntentId: id });
+    }
+    if (!order) {
+      return res.status(404).json({ success: false, message: 'Order not found.' });
+    }
+
+    const { sendOrderEventToN8n } = require('../utils/n8nService');
+    const validEvents = ['order.created', 'order.paid', 'order.delivered', 'order.feedback'];
+    const chosenEvent = validEvents.includes(eventType) ? eventType : 'order.feedback';
+
+    const result = await sendOrderEventToN8n(chosenEvent, order);
+    return res.status(200).json({
+      success: true,
+      message: `Triggered '${chosenEvent}' to n8n webhook successfully.`,
+      result,
+    });
+  } catch (err) {
+    return res.status(500).json({ success: false, message: err.message });
+  }
+});
+
+/**
  * GET /api/payments/orders
  * List orders for the authenticated customer
  * Strict Security: Non-admin customers only receive their own orders.
