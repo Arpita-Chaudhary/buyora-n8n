@@ -5,7 +5,7 @@ const stripe = require('../config/stripe');
 const Product = require('../models/Product');
 const Order = require('../models/Order');
 const { optionalAuth, authenticateUser } = require('../middleware/authMiddleware');
-const { sendOrderStatusEmail } = require('../utils/emailService');
+const { sendOrderStatusEmail, scheduleFeedbackEmail } = require('../utils/emailService');
 const { emitOrderUpdate } = require('../config/socket');
 const { sendOrderCreatedToN8n, sendOrderPaidToN8n } = require('../utils/n8nService');
 
@@ -1305,6 +1305,9 @@ const handleOrderStatusUpdate = async (req, res) => {
         .catch((err) => {
           console.error('[ORDER DELIVERED EMAIL ERROR]: Failed to send delivery email:', err.message);
         });
+
+      // Schedule customer review & feedback email to be sent 5 minutes after delivery
+      scheduleFeedbackEmail(order._id);
     }
 
     return res.status(200).json({

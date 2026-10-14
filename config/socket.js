@@ -370,9 +370,15 @@ function initSocket(httpServer) {
         emitOrderUpdate(orderDoc._id, orderDoc);
 
         if (cleanStatus === 'DELIVERED') {
-          sendOrderStatusEmail({ order: orderDoc, statusType: 'delivered' }).catch((err) => {
-            console.error('[Socket.IO] Failed to send delivery email:', err.message);
-          });
+          try {
+            const { sendOrderStatusEmail, scheduleFeedbackEmail } = require('../utils/emailService');
+            sendOrderStatusEmail({ order: orderDoc, statusType: 'delivered' }).catch((err) => {
+              console.error('[Socket.IO] Failed to send delivery email:', err.message);
+            });
+            scheduleFeedbackEmail(orderDoc._id);
+          } catch (mailErr) {
+            console.error('[Socket.IO] Email service notice:', mailErr.message);
+          }
         }
       } else {
         emitOrderUpdate(cleanOrderId, { orderStatus: cleanStatus });

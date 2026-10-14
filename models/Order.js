@@ -247,6 +247,10 @@ const orderSchema = new mongoose.Schema(
       type: Boolean,
       default: false,
     },
+    feedbackEmailSent: {
+      type: Boolean,
+      default: false,
+    },
   },
   {
     timestamps: true,

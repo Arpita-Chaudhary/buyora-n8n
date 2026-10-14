@@ -126,10 +126,11 @@ const sendOrderStatusEmail = async ({ order, statusType }) => {
   const isCreated = cleanStatusType === 'created' || cleanStatusType === 'placed' || cleanStatusType === 'order_created';
   const isPaid = cleanStatusType === 'paid' || cleanStatusType === 'payment_done';
   const isDelivered = cleanStatusType === 'delivered';
+  const isFeedback = cleanStatusType === 'feedback' || cleanStatusType === 'review';
 
-  // Only send emails for created, payment done and product delivered
-  if (!isCreated && !isPaid && !isDelivered) {
-    console.log(`[ORDER EMAIL]: Skipping status '${cleanStatusType}'. Only 'created', 'paid' and 'delivered' emails are sent.`);
+  // Only send emails for created, payment done, product delivered, and 5-min post-delivery feedback
+  if (!isCreated && !isPaid && !isDelivered && !isFeedback) {
+    console.log(`[ORDER EMAIL]: Skipping status '${cleanStatusType}'. Only 'created', 'paid', 'delivered', and 'feedback' emails are sent.`);
     return null;
   }
 
@@ -146,6 +147,11 @@ const sendOrderStatusEmail = async ({ order, statusType }) => {
 
   if (isDelivered && order.deliveryEmailSent) {
     console.log(`[ORDER EMAIL]: Delivery confirmation email already sent for Order ${order._id}. Skipping duplicate.`);
+    return null;
+  }
+
+  if (isFeedback && order.feedbackEmailSent) {
+    console.log(`[ORDER EMAIL]: Feedback email already sent for Order ${order._id}. Skipping duplicate.`);
     return null;
   }
 
@@ -171,6 +177,7 @@ const sendOrderStatusEmail = async ({ order, statusType }) => {
   const currency = (order.currency || 'USD').toUpperCase();
   const totalAmount = Number(order.totalAmount || 0).toFixed(2);
   const items = order.orderItems || [];
+  const storeUrl = process.env.CLIENT_URL || process.env.FRONTEND_URL || 'https://buyora-n8n.vercel.app';
 
   // Generate HTML table rows for order items
   const itemsHtml = items.map((it) => `
@@ -276,6 +283,28 @@ const sendOrderStatusEmail = async ({ order, statusType }) => {
           <strong>🕒 Delivered At:</strong> ${order.deliveredAt ? new Date(order.deliveredAt).toLocaleString('en-US', { dateStyle: 'medium', timeStyle: 'short' }) : new Date().toLocaleString('en-US', { dateStyle: 'medium', timeStyle: 'short' })}
         </div>
         If you have any feedback or if anything was not right with your order, you can request a return or reach customer care anytime from your account.`;
+      break;
+
+    case 'feedback':
+      subject = `⭐ How did we do? Rate Order #${orderShortId} - Buyora`;
+      statusBannerColor = '#f59e0b';
+      statusTitle = 'We Value Your Feedback! ⭐';
+      statusDescription = `Hi ${customerName},<br/><br/>
+        Your order <strong>#${orderShortId}</strong> was delivered a few minutes ago. We hope your items arrived in great condition and you're loving your purchase!<br/><br/>
+        <div style="background: #fffbeb; border: 1px solid #fde68a; border-radius: 10px; padding: 18px; text-align: center; margin: 16px 0;">
+          <p style="margin: 0 0 10px 0; font-weight: 700; color: #92400e; font-size: 15px;">
+            How was your shopping and delivery experience?
+          </p>
+          <div style="font-size: 32px; letter-spacing: 8px; margin: 12px 0;">
+            ⭐⭐⭐⭐⭐
+          </div>
+          <div style="margin-top: 14px;">
+            <a href="${storeUrl}/orders/${order._id}?feedback=5" style="display: inline-block; background: #d97706; color: #ffffff; text-decoration: none; padding: 10px 22px; border-radius: 6px; font-weight: 700; font-size: 14px; box-shadow: 0 2px 8px rgba(217, 119, 6, 0.3);">
+              Leave 5-Star Review →
+            </a>
+          </div>
+        </div>
+        Your feedback takes just 30 seconds and helps us keep improving your experience!`;
       break;
 
     default:
@@ -407,6 +436,9 @@ const sendOrderStatusEmail = async ({ order, statusType }) => {
       } else if (isDelivered) {
         await Order.findByIdAndUpdate(order._id, { deliveryEmailSent: true });
         order.deliveryEmailSent = true;
+      } else if (isFeedback) {
+        await Order.findByIdAndUpdate(order._id, { feedbackEmailSent: true });
+        order.feedbackEmailSent = true;
       }
     } catch (_) {}
   }
@@ -418,9 +450,51 @@ const sendOrderStatusEmail = async ({ order, statusType }) => {
   };
 };
 
+/**
+ * Schedules a customer feedback email to be sent 5 minutes after order delivery.
+ * Uses persistent timer and idempotency check against order.feedbackEmailSent.
+ *
+ * @param {string|Object} orderId - Target Order ID
+ * @param {number} delayMs - Delay in milliseconds (default: 5 minutes = 300,000 ms)
+ */
+const scheduleFeedbackEmail = (orderId, delayMs = 5 * 60 * 1000) => {
+  if (!orderId) return;
+
+  const idStr = orderId.toString().trim();
+  const delayMinutes = Math.round(delayMs / 60000);
+  console.log(`[FEEDBACK EMAIL]: Scheduled to send in ${delayMinutes} minutes for Order #${idStr}`);
+
+  setTimeout(async () => {
+    try {
+      const Order = require('../models/Order');
+      const order = await Order.findById(idStr);
+
+      if (!order) {
+        console.warn(`[FEEDBACK EMAIL]: Order #${idStr} not found when 5-min timer expired.`);
+        return;
+      }
+
+      if (order.feedbackEmailSent) {
+        console.log(`[FEEDBACK EMAIL]: Feedback email already sent for Order #${idStr}. Skipping.`);
+        return;
+      }
+
+      console.log(`[FEEDBACK EMAIL]: 5-minute post-delivery timer elapsed! Dispatching feedback review email for Order #${idStr}...`);
+      const result = await sendOrderStatusEmail({ order, statusType: 'feedback' });
+      if (result?.success) {
+        await Order.findByIdAndUpdate(idStr, { feedbackEmailSent: true });
+        console.log(`[FEEDBACK EMAIL]: Successfully delivered 5-minute feedback email to customer for Order #${idStr}`);
+      }
+    } catch (err) {
+      console.error(`[FEEDBACK EMAIL ERROR]: Failed to send 5-minute feedback email for Order #${idStr}:`, err.message);
+    }
+  }, delayMs);
+};
+
 module.exports = {
   sendPromotionalEmails,
   sendOrderStatusEmail,
+  scheduleFeedbackEmail,
   verifyEmailService,
 };
 
