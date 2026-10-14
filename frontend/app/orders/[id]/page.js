@@ -132,6 +132,8 @@ export default function OrderDetailsPage() {
           setErrorMessage('Your session has expired. Please sign in to view this order.');
         } else if (res.status === 403) {
           setErrorMessage('Access Denied: You do not have permission to view this order. Customer orders are strictly private.');
+        } else if (res.status === 402) {
+          setErrorMessage('Payment Incomplete: This order has not been paid yet. Please complete payment at checkout.');
         } else if (res.status === 404) {
           setErrorMessage('Order Not Found: The requested order could not be located.');
         } else {
@@ -545,6 +547,45 @@ export default function OrderDetailsPage() {
             <div style={{ display: 'flex', gap: '12px', marginTop: '8px' }}>
               <Link href="/orders" className={styles.actionBtn}>
                 Back to My Orders
+              </Link>
+              <Link
+                href="/products"
+                className={styles.actionBtn}
+                style={{ background: '#f1f5f9', color: '#334155', border: '1px solid #cbd5e1' }}
+              >
+                Browse Products
+              </Link>
+            </div>
+          </div>
+        </main>
+      </div>
+    );
+  }
+
+  // ---------------------------------------------------------------------------
+  // View: Payment Incomplete / Unpaid Order (402 or pending)
+  // ---------------------------------------------------------------------------
+  if (!isLoading && (errorStatus === 402 || (order && order.paymentStatus === 'pending'))) {
+    return (
+      <div className={styles.pageContainer}>
+        {renderHeader()}
+        <main className={styles.mainContainer}>
+          <div className={styles.centerCard} style={{ borderColor: '#fef3c7', background: '#fffbeb' }}>
+            <div className={styles.iconCircle} style={{ background: '#fef3c7', color: '#d97706' }}>
+              <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2">
+                <rect x="1" y="4" width="22" height="16" rx="2" ry="2"></rect>
+                <line x1="1" y1="10" x2="23" y2="10"></line>
+              </svg>
+            </div>
+            <h2 className={styles.stateTitle} style={{ color: '#92400e' }}>
+              Payment Incomplete
+            </h2>
+            <p className={styles.stateDesc} style={{ color: '#b45309' }}>
+              This order has not been paid yet. Order confirmation, email dispatches, and delivery tracking only activate after verified payment.
+            </p>
+            <div style={{ display: 'flex', gap: '12px', marginTop: '8px' }}>
+              <Link href="/checkout" className={styles.actionBtn} style={{ background: '#2563eb', color: '#ffffff' }}>
+                Complete Payment at Checkout
               </Link>
               <Link
                 href="/products"

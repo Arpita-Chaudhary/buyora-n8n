@@ -431,19 +431,7 @@ router.post('/create-payment-intent', optionalAuth, async (req, res) => {
       stockDeducted: false,
     });
 
-    // 9. Send order confirmation email immediately to customer
-    sendOrderStatusEmail({ order: newOrder, statusType: 'created' })
-      .then(async () => {
-        newOrder.confirmationEmailSent = true;
-        await newOrder.save();
-        console.log(`[Email Service] Confirmation email dispatched immediately for Order #${newOrder._id}`);
-      })
-      .catch((err) => console.warn('[Email Service] Direct email notice:', err.message));
-
-    // Also trigger n8n order.created workflow asynchronously in background
-    sendOrderCreatedToN8n(newOrder).catch((err) => {
-      console.warn(`[n8n Integration] Background dispatch:`, err.message);
-    });
+    // 9. Draft order created in pending state. Confirmation emails & n8n webhooks are dispatched strictly after payment verification in fulfillOrderPayment().
 
     // 10. Return ONLY what is needed by the frontend
     return res.status(200).json({
@@ -555,18 +543,23 @@ async function fulfillOrderPayment(order, paymentIntent) {
   // 4. Emit real-time tracking event via Socket.IO
   emitOrderUpdate(order._id.toString(), order);
 
-  // 5. Send order confirmation & payment email notification (awaited to guarantee delivery before response returns)
+  // 5. Send order confirmation & payment email notification ONLY upon verified payment
   try {
-    console.log(`[ORDER FULFILLED]: Sending order confirmation & payment email for Order #${order._id}...`);
-    await sendOrderStatusEmail({ order, statusType: 'paid' });
+    console.log(`[ORDER FULFILLED]: Dispatching confirmed order emails for Order #${order._id}...`);
+    if (!order.confirmationEmailSent) {
+      await sendOrderStatusEmail({ order, statusType: 'created' });
+      await sendOrderCreatedToN8n(order);
+      order.confirmationEmailSent = true;
+    }
+    if (!order.paymentEmailSent) {
+      await sendOrderStatusEmail({ order, statusType: 'paid' });
+      await sendOrderPaidToN8n(order);
+      order.paymentEmailSent = true;
+    }
+    await order.save();
   } catch (err) {
     console.error('[EMAIL NOTIFICATION FAILED]:', err.message);
   }
-
-  // 6. Trigger n8n order.paid workflow asynchronously (non-blocking)
-  sendOrderPaidToN8n(order).catch((err) => {
-    console.warn(`[n8n Integration] Notice: Could not dispatch order.paid for #${order._id}:`, err.message);
-  });
 
   // 7. Schedule automated delivery progression for every paid order
   // Ensures order is delivered and 2-min feedback email is sent every time an order is placed!
@@ -917,6 +910,16 @@ router.get('/orders/:id', authenticateUser, async (req, res) => {
       });
     }
 
+    // Unpaid order protection: customers cannot access tracking or fulfillment on unpaid orders
+    if (order.paymentStatus === 'pending' && !isAdmin) {
+      return res.status(402).json({
+        success: false,
+        message: 'Payment Incomplete: This order has not been paid yet. Please complete checkout to place this order.',
+        orderId: order._id,
+        paymentStatus: 'pending',
+      });
+    }
+
     return res.status(200).json({
       success: true,
       data: order,
@@ -1019,25 +1022,29 @@ router.get('/orders', authenticateUser, async (req, res) => {
 
     const orders = await Order.find(filter).sort({ createdAt: -1 }).limit(100);
 
-    // Auto-sync fallback with Stripe: if any recent pending order has a Stripe PaymentIntent ID
+    // Auto-sync fallback with Stripe: only confirmed paid orders are returned to customers
+    const confirmedOrders = [];
     for (let i = 0; i < orders.length; i++) {
-      const o = orders[i];
+      let o = orders[i];
       if (o.paymentStatus === 'pending' && o.stripePaymentIntentId) {
         try {
           const pi = await stripe.paymentIntents.retrieve(o.stripePaymentIntentId);
           if (pi && pi.status === 'succeeded') {
-            orders[i] = await fulfillOrderPayment(o, pi);
+            o = await fulfillOrderPayment(o, pi);
+            confirmedOrders.push(o);
           }
         } catch (stripeErr) {
-          // Non-blocking sync error
+          // Unpaid draft order excluded
         }
+      } else if (o.paymentStatus === 'paid' || o.paymentStatus === 'refunded' || req.user.role === 'ADMIN') {
+        confirmedOrders.push(o);
       }
     }
 
     return res.status(200).json({
       success: true,
-      count: orders.length,
-      data: orders,
+      count: confirmedOrders.length,
+      data: confirmedOrders,
     });
   } catch (error) {
     console.error('Error fetching orders list:', error);
