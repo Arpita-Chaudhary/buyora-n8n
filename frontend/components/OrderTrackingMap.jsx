@@ -409,6 +409,9 @@ export default function OrderTrackingMap({
         boxShadow: '0 4px 20px -2px rgba(0, 0, 0, 0.05)',
         marginTop: '16px',
         marginBottom: '24px',
+        position: 'relative',
+        zIndex: 1,
+        isolation: 'isolate',
       }}
     >
       {/* Live Tracking Header Bar */}
@@ -518,7 +521,7 @@ export default function OrderTrackingMap({
       </div>
 
       {/* Interactive Leaflet Map */}
-      <div style={{ height: '360px', width: '100%', position: 'relative' }}>
+      <div style={{ height: '360px', width: '100%', position: 'relative', zIndex: 1, isolation: 'isolate' }}>
         <MapContainer
           center={defaultCenter}
           zoom={14}

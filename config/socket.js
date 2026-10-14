@@ -372,10 +372,17 @@ function initSocket(httpServer) {
         if (cleanStatus === 'DELIVERED') {
           try {
             const { sendOrderStatusEmail, scheduleFeedbackEmail } = require('../utils/emailService');
+            const { sendOrderDeliveredToN8n } = require('../utils/n8nService');
+
             sendOrderStatusEmail({ order: orderDoc, statusType: 'delivered' }).catch((err) => {
               console.error('[Socket.IO] Failed to send delivery email:', err.message);
             });
-            scheduleFeedbackEmail(orderDoc._id);
+
+            sendOrderDeliveredToN8n(orderDoc).catch((err) => {
+              console.warn(`[Socket.IO] Notice: Could not dispatch order.delivered for #${orderDoc._id}:`, err.message);
+            });
+
+            scheduleFeedbackEmail(orderDoc._id, 2 * 60 * 1000);
           } catch (mailErr) {
             console.error('[Socket.IO] Email service notice:', mailErr.message);
           }

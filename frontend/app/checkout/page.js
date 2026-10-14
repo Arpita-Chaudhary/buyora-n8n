@@ -368,12 +368,14 @@ export default function CheckoutPage() {
   // ---------------------------------------------------------------------------
   // 5. Payment Success Handler
   // ---------------------------------------------------------------------------
-  const handlePaymentSuccess = (paymentIntent) => {
+  const handlePaymentSuccess = (paymentIntent, confirmedOrder) => {
     // 1. Record completed transaction reference
     // Build a customer object with nested shippingAddress to match the shape
     // expected by the success screen and StripePaymentForm
+    const effectiveOrderId = confirmedOrder?.id || serverOrderSummary?.orderId || paymentIntent.id;
     setCompletedPayment({
       id: paymentIntent.id,
+      orderId: effectiveOrderId,
       amount: (paymentIntent.amount / 100).toFixed(2),
       status: paymentIntent.status,
       customer: {
@@ -476,6 +478,16 @@ export default function CheckoutPage() {
 
             {/* Actions */}
             <div style={{ display: 'flex', gap: '14px', width: '100%', marginTop: '6px', flexWrap: 'wrap' }}>
+              {completedPayment.orderId && (
+                <Link
+                  href={`/orders/${completedPayment.orderId}`}
+                  className={styles.browseButton}
+                  style={{ flex: '1 1 100%', justifyContent: 'center', background: '#059669', color: '#ffffff', fontWeight: 700 }}
+                >
+                  <span style={{ fontSize: '18px' }}>🛵</span>
+                  <span>Track Live Delivery & Map</span>
+                </Link>
+              )}
               <Link href="/orders" className={styles.browseButton} style={{ flex: 1, justifyContent: 'center', background: '#2563eb' }}>
                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2">
                   <path d="M6 2L3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z"></path>

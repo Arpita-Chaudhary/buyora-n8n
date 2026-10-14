@@ -143,7 +143,7 @@ const sendOrderStatusEmail = async ({ order, statusType }) => {
   const isDelivered = cleanStatusType === 'delivered';
   const isFeedback = cleanStatusType === 'feedback' || cleanStatusType === 'review';
 
-  // Only send emails for created, payment done, product delivered, and 5-min post-delivery feedback
+  // Only send emails for created, payment done, product delivered, and 2-min post-delivery feedback
   if (!isCreated && !isPaid && !isDelivered && !isFeedback) {
     console.log(`[ORDER EMAIL]: Skipping status '${cleanStatusType}'. Only 'created', 'paid', 'delivered', and 'feedback' emails are sent.`);
     return null;
@@ -305,7 +305,7 @@ const sendOrderStatusEmail = async ({ order, statusType }) => {
       statusBannerColor = '#f59e0b';
       statusTitle = 'We Value Your Feedback! ⭐';
       statusDescription = `Hi ${customerName},<br/><br/>
-        Your order <strong>#${orderShortId}</strong> was delivered a few minutes ago. We hope your items arrived in great condition and you're loving your purchase!<br/><br/>
+        Your order <strong>#${orderShortId}</strong> was delivered 2 minutes ago. We hope your items arrived in great condition and you're loving your purchase!<br/><br/>
         <div style="background: #fffbeb; border: 1px solid #fde68a; border-radius: 10px; padding: 18px; text-align: center; margin: 16px 0;">
           <p style="margin: 0 0 10px 0; font-weight: 700; color: #92400e; font-size: 15px;">
             How was your shopping and delivery experience?
@@ -480,13 +480,13 @@ const sendOrderStatusEmail = async ({ order, statusType }) => {
 };
 
 /**
- * Schedules a customer feedback email to be sent 5 minutes after order delivery.
+ * Schedules a customer feedback email to be sent 2 minutes after order delivery.
  * Uses persistent timer and idempotency check against order.feedbackEmailSent.
  *
  * @param {string|Object} orderId - Target Order ID
- * @param {number} delayMs - Delay in milliseconds (default: 5 minutes = 300,000 ms)
+ * @param {number} delayMs - Delay in milliseconds (default: 2 minutes = 120,000 ms)
  */
-const scheduleFeedbackEmail = (orderId, delayMs = 5 * 60 * 1000) => {
+const scheduleFeedbackEmail = (orderId, delayMs = 2 * 60 * 1000) => {
   if (!orderId) return;
 
   const idStr = orderId.toString().trim();
@@ -499,7 +499,7 @@ const scheduleFeedbackEmail = (orderId, delayMs = 5 * 60 * 1000) => {
       const order = await Order.findById(idStr);
 
       if (!order) {
-        console.warn(`[FEEDBACK EMAIL]: Order #${idStr} not found when 5-min timer expired.`);
+        console.warn(`[FEEDBACK EMAIL]: Order #${idStr} not found when 2-min timer expired.`);
         return;
       }
 
@@ -508,22 +508,78 @@ const scheduleFeedbackEmail = (orderId, delayMs = 5 * 60 * 1000) => {
         return;
       }
 
-      console.log(`[FEEDBACK EMAIL]: 5-minute post-delivery timer elapsed! Dispatching feedback review email for Order #${idStr}...`);
+      console.log(`[FEEDBACK EMAIL]: 2-minute post-delivery timer elapsed! Dispatching feedback review email for Order #${idStr}...`);
       const result = await sendOrderStatusEmail({ order, statusType: 'feedback' });
       if (result?.success) {
         await Order.findByIdAndUpdate(idStr, { feedbackEmailSent: true });
-        console.log(`[FEEDBACK EMAIL]: Successfully delivered 5-minute feedback email to customer for Order #${idStr}`);
+        console.log(`[FEEDBACK EMAIL]: Successfully delivered 2-minute feedback email to customer for Order #${idStr}`);
+
+        try {
+          const { sendOrderFeedbackToN8n } = require('./n8nService');
+          sendOrderFeedbackToN8n(order).catch((n8nErr) => {
+            console.warn(`[n8n Integration] Notice: Could not dispatch order.feedback for #${idStr}:`, n8nErr.message);
+          });
+        } catch (_) {}
       }
     } catch (err) {
-      console.error(`[FEEDBACK EMAIL ERROR]: Failed to send 5-minute feedback email for Order #${idStr}:`, err.message);
+      console.error(`[FEEDBACK EMAIL ERROR]: Failed to send 2-minute feedback email for Order #${idStr}:`, err.message);
     }
   }, delayMs);
+};
+
+let feedbackWorkerInterval = null;
+
+/**
+ * Background worker that runs every 30 seconds to catch any delivered orders that
+ * passed the 2-minute mark but haven't received their feedback email yet (e.g. server restart resilience).
+ */
+const startFeedbackEmailBackgroundWorker = () => {
+  if (feedbackWorkerInterval) return;
+
+  console.log('✔ [FEEDBACK EMAIL WORKER]: Background worker started (checks every 30s for orders delivered >= 2 mins ago)');
+
+  feedbackWorkerInterval = setInterval(async () => {
+    try {
+      const Order = require('../models/Order');
+      const twoMinutesAgo = new Date(Date.now() - 2 * 60 * 1000);
+
+      // Find all delivered orders that have not received feedback email and were delivered at least 2 minutes ago
+      const pendingOrders = await Order.find({
+        orderStatus: { $in: ['DELIVERED', 'delivered'] },
+        feedbackEmailSent: { $ne: true },
+        $or: [
+          { deliveredAt: { $lte: twoMinutesAgo } },
+          { deliveredAt: { $exists: false }, updatedAt: { $lte: twoMinutesAgo } },
+          { deliveredAt: null, updatedAt: { $lte: twoMinutesAgo } },
+        ],
+      }).limit(10);
+
+      for (const order of pendingOrders) {
+        console.log(`[FEEDBACK EMAIL WORKER]: Found delivered order #${order._id} pending feedback email (Delivered: ${order.deliveredAt || order.updatedAt}). Dispatching now...`);
+        const result = await sendOrderStatusEmail({ order, statusType: 'feedback' });
+        if (result?.success) {
+          await Order.findByIdAndUpdate(order._id, { feedbackEmailSent: true });
+          console.log(`[FEEDBACK EMAIL WORKER]: Successfully sent 2-minute feedback email for Order #${order._id}`);
+          try {
+            const { sendOrderFeedbackToN8n } = require('./n8nService');
+            sendOrderFeedbackToN8n(order).catch((n8nErr) => {
+              console.warn(`[n8n Integration] Notice: Could not dispatch order.feedback for #${order._id}:`, n8nErr.message);
+            });
+          } catch (_) {}
+        }
+      }
+    } catch (err) {
+      // Safe non-blocking error handler
+      console.warn('[FEEDBACK EMAIL WORKER NOTICE]: Check loop warning:', err.message);
+    }
+  }, 30 * 1000);
 };
 
 module.exports = {
   sendPromotionalEmails,
   sendOrderStatusEmail,
   scheduleFeedbackEmail,
+  startFeedbackEmailBackgroundWorker,
   verifyEmailService,
 };
 

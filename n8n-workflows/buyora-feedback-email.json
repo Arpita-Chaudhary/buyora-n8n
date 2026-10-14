@@ -1,0 +1,68 @@
+{
+  "name": "Buyora - 2-Minute Post-Delivery Customer Feedback Email",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "buyora-order-delivered",
+        "authentication": "none",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [0, 0],
+      "id": "buyora-order-delivered-webhook",
+      "name": "Buyora Order Delivered Webhook"
+    },
+    {
+      "parameters": {
+        "amount": 2,
+        "unit": "minutes"
+      },
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [240, 0],
+      "id": "wait-2-minutes-post-delivery",
+      "name": "Wait 2 Minutes After Delivery",
+      "webhookId": "buyora-wait-2m"
+    },
+    {
+      "parameters": {
+        "fromEmail": "choudharyarpita504@gmail.com",
+        "toEmail": "={{ $json.body.data.customer.email || 'aaravipooner8424@gmail.com' }}",
+        "subject": "=⭐ How did we do? Rate Order #{{ $json.body.data.orderId ? $json.body.data.orderId.slice(-8).toUpperCase() : 'BUYORA' }} - Buyora",
+        "html": "<div style=\"font-family: Arial, sans-serif; max-width: 600px; margin: auto; padding: 24px; border: 1px solid #e2e8f0; border-radius: 12px; background: #ffffff;\">\n  <div style=\"text-align: center; margin-bottom: 20px;\">\n    <h2 style=\"color: #2563eb; margin: 0 0 6px 0;\">Buyora Store</h2>\n    <p style=\"color: #64748b; font-size: 13px; margin: 0;\">Customer Review & Satisfaction</p>\n  </div>\n\n  <div style=\"background: #fffbeb; border: 1px solid #fde68a; border-radius: 10px; padding: 20px; text-align: center;\">\n    <h3 style=\"color: #92400e; margin: 0 0 8px 0;\">We Value Your Feedback! ⭐</h3>\n    <p style=\"color: #78350f; font-size: 14px; margin: 0 0 16px 0;\">\n      Hi {{ $json.body.data.customer.fullName || 'Valued Customer' }}, your order <strong>#{{ $json.body.data.orderId ? $json.body.data.orderId.slice(-8).toUpperCase() : '' }}</strong> was safely delivered 2 minutes ago. How was your delivery and shopping experience?\n    </p>\n    <div style=\"font-size: 32px; letter-spacing: 8px; margin: 12px 0;\">\n      ⭐⭐⭐⭐⭐\n    </div>\n    <div style=\"margin-top: 18px;\">\n      <a href=\"https://buyora-n8n.vercel.app/orders/{{ $json.body.data.orderId }}?feedback=5\" style=\"display: inline-block; background: #d97706; color: #ffffff; text-decoration: none; padding: 12px 26px; border-radius: 8px; font-weight: 700; font-size: 14px;\">\n        Leave 5-Star Review →\n      </a>\n    </div>\n  </div>\n\n  <p style=\"color: #94a3b8; font-size: 12px; margin-top: 24px; text-align: center;\">\n    Thank you for shopping with Buyora Store! Your feedback helps us keep improving.\n  </p>\n</div>",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 2.1,
+      "position": [480, 0],
+      "id": "send-2min-feedback-email",
+      "name": "Send 2-Minute Feedback Email"
+    }
+  ],
+  "connections": {
+    "Buyora Order Delivered Webhook": {
+      "main": [
+        [
+          {
+            "node": "Wait 2 Minutes After Delivery",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Wait 2 Minutes After Delivery": {
+      "main": [
+        [
+          {
+            "node": "Send 2-Minute Feedback Email",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  }
+}

@@ -7,7 +7,12 @@ const Order = require('../models/Order');
 const { optionalAuth, authenticateUser } = require('../middleware/authMiddleware');
 const { sendOrderStatusEmail, scheduleFeedbackEmail } = require('../utils/emailService');
 const { emitOrderUpdate } = require('../config/socket');
-const { sendOrderCreatedToN8n, sendOrderPaidToN8n } = require('../utils/n8nService');
+const {
+  sendOrderCreatedToN8n,
+  sendOrderPaidToN8n,
+  sendOrderDeliveredToN8n,
+  sendOrderFeedbackToN8n,
+} = require('../utils/n8nService');
 
 /**
  * Helper to validate MongoDB ObjectId
@@ -563,8 +568,68 @@ async function fulfillOrderPayment(order, paymentIntent) {
     console.warn(`[n8n Integration] Notice: Could not dispatch order.paid for #${order._id}:`, err.message);
   });
 
+  // 7. Schedule automated delivery progression for every paid order
+  // Ensures order is delivered and 2-min feedback email is sent every time an order is placed!
+  scheduleAutoDelivery(order._id);
+
   return order;
 }
+
+/**
+ * Automatically simulates progression to OUT_FOR_DELIVERY and DELIVERED for every paid order.
+ * Ensures that even if the customer never opens the tracking map and no admin manually confirms,
+ * every paid order is safely delivered, delivery email is dispatched, and 2-min feedback email is sent!
+ */
+const scheduleAutoDelivery = (orderId) => {
+  if (!orderId) return;
+  const orderIdStr = orderId.toString();
+
+  // Step 1: After 15 seconds, move to OUT_FOR_DELIVERY (if not already cancelled/delivered)
+  setTimeout(async () => {
+    try {
+      const order = await Order.findById(orderIdStr);
+      if (!order) return;
+      if (order.orderStatus === 'CANCELLED' || order.orderStatus === 'DELIVERED') return;
+
+      order.orderStatus = 'OUT_FOR_DELIVERY';
+      await order.save();
+      emitOrderUpdate(orderIdStr, order);
+      console.log(`[AUTO-DELIVERY]: Order #${orderIdStr} automatically progressed to OUT_FOR_DELIVERY`);
+    } catch (err) {
+      console.warn(`[AUTO-DELIVERY NOTICE]: Step 1 warning for Order #${orderIdStr}:`, err.message);
+    }
+  }, 15 * 1000);
+
+  // Step 2: After 45 seconds, move to DELIVERED (if not already cancelled/delivered)
+  setTimeout(async () => {
+    try {
+      const order = await Order.findById(orderIdStr);
+      if (!order) return;
+      if (order.orderStatus === 'CANCELLED' || order.orderStatus === 'DELIVERED') return;
+
+      order.orderStatus = 'DELIVERED';
+      order.deliveredAt = new Date();
+      await order.save();
+      emitOrderUpdate(orderIdStr, order);
+      console.log(`[AUTO-DELIVERY]: Order #${orderIdStr} automatically marked as DELIVERED!`);
+
+      // Dispatch Delivery Confirmation Email
+      sendOrderStatusEmail({ order, statusType: 'delivered' }).catch((mailErr) => {
+        console.error(`[ORDER DELIVERED EMAIL ERROR]: Failed to send delivery email for #${orderIdStr}:`, mailErr.message);
+      });
+
+      // Dispatch n8n order.delivered webhook
+      sendOrderDeliveredToN8n(order).catch((n8nErr) => {
+        console.warn(`[n8n Integration] Notice: Could not dispatch order.delivered for #${orderIdStr}:`, n8nErr.message);
+      });
+
+      // Schedule Feedback & Review Email to be sent in exactly 2 minutes (120,000 ms)
+      scheduleFeedbackEmail(order._id, 2 * 60 * 1000);
+    } catch (err) {
+      console.warn(`[AUTO-DELIVERY NOTICE]: Step 2 warning for Order #${orderIdStr}:`, err.message);
+    }
+  }, 45 * 1000);
+};
 
 /**
  * POST /api/payments/confirm-payment
@@ -1307,7 +1372,7 @@ const handleOrderStatusUpdate = async (req, res) => {
     // 2. Database update succeeded! Emit Socket.IO event named: orderStatusUpdated strictly to order_<orderId>
     emitOrderUpdate(order._id.toString(), order);
 
-    // 3. Automated delivery confirmation email to customer
+    // 3. Automated delivery confirmation email to customer & n8n workflow
     if (targetStatus === 'DELIVERED') {
       sendOrderStatusEmail({ order, statusType: 'delivered' })
         .then((res) => {
@@ -1317,8 +1382,13 @@ const handleOrderStatusUpdate = async (req, res) => {
           console.error('[ORDER DELIVERED EMAIL ERROR]: Failed to send delivery email:', err.message);
         });
 
-      // Schedule customer review & feedback email to be sent 5 minutes after delivery
-      scheduleFeedbackEmail(order._id);
+      // Dispatch n8n order.delivered webhook asynchronously
+      sendOrderDeliveredToN8n(order).catch((err) => {
+        console.warn(`[n8n Integration] Notice: Could not dispatch order.delivered for #${order._id}:`, err.message);
+      });
+
+      // Schedule customer review & feedback email to be sent 2 minutes after delivery
+      scheduleFeedbackEmail(order._id, 2 * 60 * 1000);
     }
 
     return res.status(200).json({

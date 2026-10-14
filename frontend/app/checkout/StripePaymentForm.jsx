@@ -87,6 +87,7 @@ function InnerStripeCheckoutForm({
               headers['Authorization'] = `Bearer ${token}`;
             }
 
+            let confirmedOrder = null;
             const confirmRes = await fetch('/api/payments/confirm-payment', {
               method: 'POST',
               headers,
@@ -99,6 +100,7 @@ function InnerStripeCheckoutForm({
               // The webhook / auto-sync will handle it as a fallback
             } else {
               console.log('Server-side payment confirmed:', confirmData.message);
+              confirmedOrder = confirmData.order;
             }
           } catch (confirmErr) {
             console.warn('Server-side confirm-payment call failed:', confirmErr.message);
@@ -106,7 +108,7 @@ function InnerStripeCheckoutForm({
           }
 
           // Hand off to success state
-          onPaymentSuccess(paymentIntent);
+          onPaymentSuccess(paymentIntent, confirmedOrder);
         } else {
           setErrorMessage(`Payment status: ${paymentIntent.status}. Please try again or check your payment method.`);
           setIsProcessing(false);

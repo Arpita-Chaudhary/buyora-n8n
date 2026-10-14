@@ -157,6 +157,20 @@ const sendOrderPaidToN8n = async (order) => {
 };
 
 /**
+ * Triggers n8n workflow for delivered order (called after order reaches DELIVERED).
+ */
+const sendOrderDeliveredToN8n = async (order) => {
+  return sendOrderEventToN8n('order.delivered', order);
+};
+
+/**
+ * Triggers n8n workflow for customer feedback review request (called 2 mins after delivery).
+ */
+const sendOrderFeedbackToN8n = async (order) => {
+  return sendOrderEventToN8n('order.feedback', order);
+};
+
+/**
  * Generic helper for custom events.
  */
 const triggerN8nEvent = async (eventName, payload = {}) => {
@@ -168,5 +182,7 @@ module.exports = {
   sendOrderEventToN8n,
   sendOrderCreatedToN8n,
   sendOrderPaidToN8n,
+  sendOrderDeliveredToN8n,
+  sendOrderFeedbackToN8n,
   triggerN8nEvent,
 };

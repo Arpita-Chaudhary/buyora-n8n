@@ -125,10 +125,13 @@ const startServer = async () => {
     await seedProducts();
 
     // 7. Verify Nodemailer Email Service in background (does not block port 5000)
-    const { verifyEmailService } = require('./utils/emailService');
+    const { verifyEmailService, startFeedbackEmailBackgroundWorker } = require('./utils/emailService');
     verifyEmailService().catch((err) => {
       console.warn(`[EMAIL SERVICE] Warning: ${err.message}`);
     });
+
+    // 8. Start Automated 2-Minute Feedback Email Worker (resilience against server restarts)
+    startFeedbackEmailBackgroundWorker();
   } catch (error) {
     console.error(`Failed to start server: ${error.message}`);
   }

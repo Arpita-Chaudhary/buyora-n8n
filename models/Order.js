@@ -232,6 +232,12 @@ const orderSchema = new mongoose.Schema(
       default: null,
     },
 
+    // Delivered timestamp
+    deliveredAt: {
+      type: Date,
+      default: null,
+    },
+
     // Refund Request Lifecycle Tracking
     refundRequest: {
       type: refundRequestSchema,

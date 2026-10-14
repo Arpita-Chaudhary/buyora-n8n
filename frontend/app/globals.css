@@ -3,6 +3,12 @@
 @tailwind components;
 @tailwind utilities;
 
+/* Ensure Leaflet map and zoom controls stay contained inside their parent and never bleed over the fixed navbar */
+.leaflet-container {
+  z-index: 1 !important;
+  isolation: isolate;
+}
+
 /* Global Reset & Base Styles - Sleek Modern Dark Palette */
 * {
   box-sizing: border-box;
