@@ -1049,17 +1049,20 @@ router.get('/admin/refunds', authenticateUser, async (req, res) => {
       filter['refundRequest.status'] = 'approved';
     } else if (status === 'rejected') {
       filter['refundRequest.status'] = 'rejected';
+    } else if (status === 'delivered') {
+      filter.orderStatus = { $in: ['DELIVERED', 'delivered'] };
     } else if (status === 'all_requests') {
       filter['refundRequest.status'] = { $in: ['requested', 'approved', 'rejected'] };
     }
 
     const orders = await Order.find(filter)
-      .sort({ 'refundRequest.requestedAt': -1, createdAt: -1 })
+      .sort({ updatedAt: -1, 'refundRequest.requestedAt': -1, createdAt: -1 })
       .limit(100);
 
     const pendingCount = await Order.countDocuments({ 'refundRequest.status': 'requested' });
     const approvedCount = await Order.countDocuments({ 'refundRequest.status': 'approved' });
     const rejectedCount = await Order.countDocuments({ 'refundRequest.status': 'rejected' });
+    const deliveredCount = await Order.countDocuments({ orderStatus: { $in: ['DELIVERED', 'delivered'] } });
     const totalOrdersCount = await Order.countDocuments();
 
     return res.status(200).json({
@@ -1069,6 +1072,7 @@ router.get('/admin/refunds', authenticateUser, async (req, res) => {
         pendingRefunds: pendingCount,
         approvedRefunds: approvedCount,
         rejectedRefunds: rejectedCount,
+        deliveredOrders: deliveredCount,
         totalOrders: totalOrdersCount,
       },
       data: orders,

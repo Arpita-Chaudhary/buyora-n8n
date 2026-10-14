@@ -11,11 +11,12 @@ export default function RefundsManager({ token, triggerToast, onPendingCountChan
     pendingRefunds: 0,
     approvedRefunds: 0,
     rejectedRefunds: 0,
+    deliveredOrders: 0,
     totalOrders: 0,
   });
 
-  // Filter: 'requested' (default) | 'approved' | 'rejected' | 'all'
-  const [activeFilter, setActiveFilter] = useState('requested');
+  // Filter: 'all' (default to show all orders) | 'delivered' | 'requested' | 'approved' | 'rejected'
+  const [activeFilter, setActiveFilter] = useState('all');
   const [searchQuery, setSearchQuery] = useState('');
 
   // Stripe Refund Modal State
@@ -233,19 +234,51 @@ export default function RefundsManager({ token, triggerToast, onPendingCountChan
   }, [fetchRefundOrders]);
 
   // Real-time live update for admin orders
-  const { socket } = useSocket();
+  const { socket, isConnected: isSocketConnected } = useSocket();
   useEffect(() => {
     if (!socket) return;
-    const handleOrderEvent = () => {
+
+    // Join admin room for real-time broadcasts
+    socket.emit('joinAdmin');
+
+    const handleOrderEvent = (payload) => {
+      console.log('[RefundsManager] Live order update received in Admin Dashboard:', payload);
+      const updatedOrder = payload?.order || payload;
+      const orderId = updatedOrder?.orderId || updatedOrder?._id;
+      const newStatus = String(updatedOrder?.status || updatedOrder?.orderStatus || '').toUpperCase();
+
+      if (orderId && newStatus) {
+        setOrders((prev) =>
+          prev.map((o) =>
+            o._id === orderId
+              ? {
+                  ...o,
+                  orderStatus: newStatus,
+                  deliveredAt: updatedOrder?.deliveredAt || o.deliveredAt || (newStatus === 'DELIVERED' ? new Date().toISOString() : null),
+                }
+              : o
+          )
+        );
+
+        if (newStatus === 'DELIVERED') {
+          const shortId = String(orderId).substring(orderId.length - 6).toUpperCase();
+          if (triggerToast) {
+            triggerToast(`🎉 Order #${shortId} has just been automatically DELIVERED to customer!`, 'success');
+          }
+        }
+      }
+
       fetchRefundOrders();
     };
+
     socket.on('orderUpdated', handleOrderEvent);
     socket.on('orderStatusUpdated', handleOrderEvent);
+
     return () => {
       socket.off('orderUpdated', handleOrderEvent);
       socket.off('orderStatusUpdated', handleOrderEvent);
     };
-  }, [socket, fetchRefundOrders]);
+  }, [socket, fetchRefundOrders, triggerToast]);
 
   // Filtered orders by client-side search query
   const filteredOrders = useMemo(() => {
@@ -469,9 +502,25 @@ export default function RefundsManager({ token, triggerToast, onPendingCountChan
       {/* 1. Metrics Cards Overview */}
       <div className={styles.statsGrid}>
         <div className={styles.statCard}>
+          <div className={`${styles.statIcon} ${styles.statIconTotal}`}>📦</div>
+          <div className={styles.statInfo}>
+            <span className={styles.statLabel}>Total Store Orders</span>
+            <span className={styles.statValue}>{metrics.totalOrders}</span>
+          </div>
+        </div>
+
+        <div className={styles.statCard}>
+          <div className={styles.statIcon} style={{ background: '#ecfdf5', color: '#059669', fontSize: '20px' }}>🎉</div>
+          <div className={styles.statInfo}>
+            <span className={styles.statLabel}>Delivered Orders</span>
+            <span className={styles.statValue} style={{ color: '#059669' }}>{metrics.deliveredOrders || 0}</span>
+          </div>
+        </div>
+
+        <div className={styles.statCard}>
           <div className={`${styles.statIcon} ${styles.statIconPending}`}>⏳</div>
           <div className={styles.statInfo}>
-            <span className={styles.statLabel}>Pending Requests</span>
+            <span className={styles.statLabel}>Pending Refunds</span>
             <span className={styles.statValue}>{metrics.pendingRefunds}</span>
           </div>
         </div>
@@ -491,19 +540,31 @@ export default function RefundsManager({ token, triggerToast, onPendingCountChan
             <span className={styles.statValue}>{metrics.rejectedRefunds}</span>
           </div>
         </div>
-
-        <div className={styles.statCard}>
-          <div className={`${styles.statIcon} ${styles.statIconTotal}`}>📦</div>
-          <div className={styles.statInfo}>
-            <span className={styles.statLabel}>Total Store Orders</span>
-            <span className={styles.statValue}>{metrics.totalOrders}</span>
-          </div>
-        </div>
       </div>
 
       {/* 2. Controls Bar: Filter Tabs & Search */}
       <div className={styles.controlsBar}>
         <div className={styles.filterTabs}>
+          <button
+            type="button"
+            onClick={() => setActiveFilter('all')}
+            className={`${styles.filterBtn} ${activeFilter === 'all' ? styles.filterBtnActive : ''}`}
+          >
+            <span>All Store Orders</span>
+            <span className={styles.filterBadge}>{metrics.totalOrders}</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setActiveFilter('delivered')}
+            className={`${styles.filterBtn} ${activeFilter === 'delivered' ? styles.filterBtnActive : ''}`}
+          >
+            <span>🎉 Delivered</span>
+            <span className={styles.filterBadge} style={{ background: '#10b981', color: '#ffffff' }}>
+              {metrics.deliveredOrders || 0}
+            </span>
+          </button>
+
           <button
             type="button"
             onClick={() => setActiveFilter('requested')}
@@ -530,18 +591,38 @@ export default function RefundsManager({ token, triggerToast, onPendingCountChan
             <span>✕ Declined</span>
             <span className={styles.filterBadge}>{metrics.rejectedRefunds}</span>
           </button>
-
-          <button
-            type="button"
-            onClick={() => setActiveFilter('all')}
-            className={`${styles.filterBtn} ${activeFilter === 'all' ? styles.filterBtnActive : ''}`}
-          >
-            <span>All Store Orders</span>
-            <span className={styles.filterBadge}>{metrics.totalOrders}</span>
-          </button>
         </div>
 
         <div className={styles.searchGroup}>
+          {/* Live Socket.IO Stream Active indicator */}
+          <span
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '6px',
+              fontSize: '12px',
+              fontWeight: 700,
+              padding: '6px 12px',
+              borderRadius: '20px',
+              background: isSocketConnected ? '#ecfdf5' : '#fff1f2',
+              color: isSocketConnected ? '#059669' : '#e11d48',
+              border: isSocketConnected ? '1px solid #a7f3d0' : '1px solid #fecdd3',
+              whiteSpace: 'nowrap',
+            }}
+            title={isSocketConnected ? 'Live stream connected: orders update in real time without refreshing' : 'Reconnecting to live socket stream...'}
+          >
+            <span
+              style={{
+                width: '7px',
+                height: '7px',
+                borderRadius: '50%',
+                background: isSocketConnected ? '#10b981' : '#f43f5e',
+                boxShadow: isSocketConnected ? '0 0 0 2px rgba(16, 185, 129, 0.3)' : 'none',
+              }}
+            />
+            {isSocketConnected ? 'Live Order Stream Active' : 'Connecting Stream...'}
+          </span>
+
           <div className={styles.searchInputWrapper}>
             <span className={styles.searchIcon}>🔍</span>
             <input
@@ -636,6 +717,11 @@ export default function RefundsManager({ token, triggerToast, onPendingCountChan
                       Order #{order._id.substring(order._id.length - 8).toUpperCase()}
                     </span>
                     <span className={styles.orderDate}>Placed on {formattedDate}</span>
+                    {order.deliveredAt && (
+                      <span style={{ fontSize: '12px', color: '#059669', fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                        🎉 Delivered: {new Date(order.deliveredAt).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                      </span>
+                    )}
                     <code style={{ fontSize: '11px', color: '#64748b' }}>{order._id}</code>
                   </div>
 

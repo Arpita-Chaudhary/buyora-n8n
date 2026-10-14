@@ -122,6 +122,17 @@ function initSocket(httpServer) {
   io.on('connection', (socket) => {
     console.log(`[Socket.IO] Client connected: ${socket.id} (User: ${socket.user?.userId}, Role: ${socket.user?.role})`);
 
+    // Auto-join administrators to 'admin_room' for live updates across all orders
+    if (socket.user?.role === 'ADMIN' || socket.user?.role === 'MANAGER') {
+      socket.join('admin_room');
+      console.log(`[Socket.IO] Admin socket ${socket.id} joined 'admin_room'`);
+    }
+
+    socket.on('joinAdmin', () => {
+      socket.join('admin_room');
+      console.log(`[Socket.IO] Socket ${socket.id} explicitly joined 'admin_room'`);
+    });
+
     /**
      * Event: joinOrder
      *
@@ -584,8 +595,12 @@ function emitOrderUpdate(orderId, orderData) {
     timestamp: updatedAt,
   };
 
-  console.log(`[Socket.IO] Emitting 'orderStatusUpdated' strictly to room '${roomName}':`, payload);
+  console.log(`[Socket.IO] Emitting 'orderStatusUpdated' to room '${roomName}' and 'admin_room':`, payload);
   io.to(roomName).emit('orderStatusUpdated', payload);
+  io.to('admin_room').emit('orderStatusUpdated', payload);
+  io.to('admin_room').emit('orderUpdated', payload);
+  io.emit('orderStatusUpdated', payload);
+  io.emit('orderUpdated', payload);
 }
 
 /**
